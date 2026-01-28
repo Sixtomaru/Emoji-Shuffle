@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Emoji Shuffle Battle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
+      body {
+        font-family: 'Fredoka', sans-serif;
+      }
+      
+      /* --- OPTIMIZED GLOBAL ANIMATIONS --- */
+      
+      /* Use translate3d to force hardware acceleration on mobile */
+      @keyframes drop-in {
+        0% { transform: translate3d(var(--tx), -150%, 0); opacity: 0; }
+        60% { transform: translate3d(var(--tx), var(--ty), 0); opacity: 1; }
+        80% { transform: translate3d(var(--tx), calc(var(--ty) - 5%), 0); }
+        100% { transform: translate3d(var(--tx), var(--ty), 0); }
+      }
+
+      @keyframes zoom-pop {
+        0% { transform: translate3d(var(--tx), var(--ty), 0) scale(0); opacity: 0; }
+        50% { transform: translate3d(var(--tx), var(--ty), 0) scale(1.2); opacity: 1; }
+        100% { transform: translate3d(var(--tx), var(--ty), 0) scale(1); }
+      }
+
+      @keyframes implode {
+        0% { transform: scale(1); filter: brightness(1.5); }
+        50% { transform: scale(1.2); filter: brightness(2); background-color: white; }
+        100% { transform: scale(0); opacity: 0; }
+      }
+
+      @keyframes bounce {
+        0% { transform: scale(0.8); opacity: 0.5; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+
+      .tile-bounce {
+        animation: bounce 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      
+      .damage-float {
+        animation: floatUp 1s ease-out forwards;
+      }
+      
+      @keyframes floatUp {
+        0% { transform: translateY(0); opacity: 1; }
+        100% { transform: translateY(-50px); opacity: 0; }
+      }
+
+      /* Classes to trigger animations */
+      .animate-drop-in { animation: drop-in 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+      .animate-zoom-pop { animation: zoom-pop 0.4s ease-out forwards; }
+      .animate-implode { animation: implode 0.4s ease-in forwards; }
+
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-slate-900 text-slate-100 overflow-hidden select-none touch-none">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
