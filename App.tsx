@@ -401,7 +401,7 @@ const App: React.FC = () => {
 
   return (
     <div className={`h-screen w-screen bg-black flex overflow-hidden font-sans select-none text-slate-100 relative`}>
-      {/* Background - Removed Blur from here */}
+      {/* Background */}
       <div className={`absolute inset-0 z-0 transition-all duration-700 ease-in-out ${getLevelBackground(level, enemy.type)}`}></div>
 
       {appState === 'menu' && (
@@ -503,7 +503,6 @@ const App: React.FC = () => {
 
       {appState === 'playing' && (
           <>
-            {/* Game Content Wrapper - REMOVED global blur */}
             <div className={`flex-1 h-full flex flex-col items-center relative min-w-0 justify-center z-10 w-full max-w-md mx-auto transition-all duration-700`}>
              
                 {/* SUPERADO OVERLAY */}
@@ -564,16 +563,15 @@ const App: React.FC = () => {
                 <div className="w-full max-w-md px-4 mb-2 z-10 relative mx-auto" ref={bossRef}>
                     <BossCard boss={enemy} shake={bossShake} damageTaken={lastDamage} isDefeated={isDefeatedAnim} />
                     
-                    {/* MODIFIED COMBO UI - Moved inside relative container, pinned to RIGHT */}
+                    {/* MODIFIED COMBO UI - MOVED RIGHT */}
                     {comboCount > 0 && (
-                        <div className="absolute top-8 right-4 z-50 flex flex-col items-end animate-in zoom-in duration-300 pointer-events-none">
-                            <span className="text-yellow-400 font-black text-sm italic tracking-widest drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] whitespace-nowrap" style={{textShadow: '0 0 10px rgba(250,204,21,0.5)'}}>
+                        <div className="absolute top-1/2 right-6 transform -translate-y-1/2 z-50 flex flex-col items-center animate-in zoom-in duration-300 pointer-events-none">
+                            <span className="text-yellow-400 font-bold text-xs italic tracking-widest drop-shadow-md whitespace-nowrap mb-1">
                                 {(showFinishMessage || enemy.currentHp <= 0) ? "COMBO EXTRA" : "COMBO"}
                             </span>
-                            <span className="text-6xl font-black text-white leading-none drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]" 
+                            <span className="text-6xl font-black text-white leading-none drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] font-sans" 
                                 style={{
-                                    WebkitTextStroke: '2px #ca8a04',
-                                    textShadow: '0 0 20px rgba(250,204,21,0.6)'
+                                    textShadow: '0 0 10px rgba(250,204,21,0.8)'
                                 }}>
                                 {comboCount}
                             </span>
@@ -584,38 +582,19 @@ const App: React.FC = () => {
                 {/* BOARD CONTAINER */}
                 <div className="flex-1 w-full relative flex flex-col justify-center items-center z-10" ref={boardRef}>
                     
-                    {/* "¡YA ESTÁ!" OVERLAY - MOVED INSIDE BOARD CONTAINER & UNBLURRED */}
+                    {/* "¡YA ESTÁ!" OVERLAY - MOVED INSIDE BOARD CONTAINER & UNBLURRED - SIMPLIFIED FONT */}
                     {showFinishMessage && (
                         <div className="absolute inset-0 z-[100] flex items-center justify-center pointer-events-none">
                             <div className="relative transform scale-125 animate-gentle-bounce">
-                                <h1 
-                                    className="text-6xl md:text-8xl font-black tracking-tight text-center"
-                                    style={{
-                                        color: 'transparent',
-                                        backgroundImage: 'linear-gradient(to bottom, #fef08a, #84cc16, #eab308)', 
-                                        WebkitBackgroundClip: 'text',
-                                        backgroundClip: 'text',
-                                        WebkitTextStroke: '4px white',
-                                        filter: 'drop-shadow(0px 8px 4px rgba(0,0,0,0.6))',
-                                    }}
-                                >
-                                    ¡YA ESTÁ!
-                                </h1>
-                                <h1 
-                                    className="text-6xl md:text-8xl font-black tracking-tight text-center absolute inset-0 z-[-1]"
-                                    style={{
-                                        WebkitTextStroke: '8px rgba(0,0,0,0.5)',
-                                        color: 'transparent',
-                                    }}
-                                >
+                                <h1 className="text-6xl md:text-7xl font-black tracking-tight text-center text-white drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] stroke-black font-sans">
                                     ¡YA ESTÁ!
                                 </h1>
                             </div>
                         </div>
                     )}
 
-                    {/* BOARD COMPONENT - BLURRED WHEN MESSAGE IS SHOWN */}
-                    <div className={`transition-all duration-700 w-full flex justify-center ${showFinishMessage ? 'blur-md' : ''}`}>
+                    {/* BOARD COMPONENT - REDUCED BLUR */}
+                    <div className={`transition-all duration-700 w-full flex justify-center ${showFinishMessage ? 'blur-[2px]' : ''}`}>
                         <Board 
                             board={board} 
                             selectedTileId={selectedTileId} 

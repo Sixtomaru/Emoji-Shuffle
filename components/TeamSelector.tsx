@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Boss } from '../types';
+import { Boss, ElementType } from '../types';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 import { getLevelBackground, TYPE_PASTELS } from '../constants';
@@ -15,6 +15,25 @@ interface TeamSelectorProps {
 }
 
 const ITEMS_PER_PAGE = 12; // 3 rows * 4 columns
+
+// Helper for type icons
+const TYPE_ICONS: Record<ElementType, string> = {
+    'Fuego': '🔥',
+    'Agua': '💧',
+    'Planta': '🌿',
+    'Eléctrico': '⚡',
+    'Tierra': '🏜️',
+    'Roca': '🪨',
+    'Hielo': '❄️',
+    'Acero': '🛡️',
+    'Fantasma': '👻',
+    'Dragón': '🐲',
+    'Normal': '⚪',
+    'Bicho': '🪲',
+    'Volador': '🪶',
+    'Psíquico': '🔮',
+    'Hada': '✨'
+};
 
 const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, onUpdateTeam, onStart, nextLevel, nextEnemy, movesLeft }) => {
     const [hoveredMonster, setHoveredMonster] = useState<Boss | null>(null);
@@ -208,8 +227,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                                 )}
                                             </div>
                                             <div className="text-[10px] font-bold text-indigo-200 truncate w-full text-center px-1">{member.name}</div>
-                                            <div className="absolute top-1 right-1 px-1 rounded-sm bg-black/40 flex items-center justify-center text-[7px] text-white">
-                                                {member.type}
+                                            <div className="absolute top-1 right-1 flex items-center justify-center text-xs pointer-events-none filter drop-shadow-md">
+                                                {TYPE_ICONS[member.type]}
                                             </div>
                                         </div>
                                     ) : (
@@ -286,8 +305,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                             )}
                                         </div>
                                         <div className="text-[8px] font-bold text-slate-800 truncate w-full text-center bg-white/50 rounded px-1 pointer-events-none mx-1">{monster.name}</div>
-                                        <div className="absolute top-0.5 right-0.5 px-1 rounded-sm bg-black/40 flex items-center justify-center text-[6px] text-white pointer-events-none">
-                                            {monster.type.substring(0, 3)}
+                                        <div className="absolute top-0.5 right-0.5 flex items-center justify-center text-[10px] pointer-events-none filter drop-shadow-sm">
+                                            {TYPE_ICONS[monster.type]}
                                         </div>
                                     </div>
                                 );
@@ -312,16 +331,16 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 </button>
             </div>
 
-            {/* Mobile Drag Ghost Element */}
+            {/* Mobile Drag Ghost Element - LARGER & TRANSPARENT */}
             {dragMonster && (
                 <div 
-                    className="fixed w-24 h-24 rounded-full bg-indigo-600/90 backdrop-blur border-4 border-white z-[100] flex items-center justify-center pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-bounce shadow-2xl"
+                    className="fixed w-28 h-28 rounded-full bg-indigo-600/60 backdrop-blur-sm border-4 border-white/50 z-[100] flex items-center justify-center pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-bounce shadow-2xl scale-110"
                     style={{ left: dragPos.x, top: dragPos.y }}
                 >
                      {dragMonster.image && !imgErrors[dragMonster.id] ? (
-                        <img src={dragMonster.image} alt={dragMonster.emoji} className="w-16 h-16 object-contain" />
+                        <img src={dragMonster.image} alt={dragMonster.emoji} className="w-20 h-20 object-contain opacity-90" />
                     ) : (
-                        <span className="text-5xl">{dragMonster.emoji}</span>
+                        <span className="text-6xl opacity-90">{dragMonster.emoji}</span>
                     )}
                 </div>
             )}
