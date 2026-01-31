@@ -90,10 +90,11 @@ class SoundManager {
   }
 
   playWin() {
-    // Victory Melody
-    const notes = [523.25, 523.25, 523.25, 659.25, 783.99, 659.25, 783.99, 1046.50];
+    // Victory Melody - Pleasant, simple, low pitch "Phase Clear"
+    // C3, E3, G3 (C Major low octave)
+    const notes = [261.63, 329.63, 392.00]; 
     notes.forEach((freq, i) => {
-      this.playTone(freq, 'square', 0.3, 0.2, i * 0.2);
+      this.playTone(freq, 'triangle', 0.5, 0.3, i * 0.2); // Slower pacing, triangle wave for softer sound
     });
   }
 
@@ -104,11 +105,13 @@ class SoundManager {
   }
   
   playCaptureSuccess() {
-      // Happy jingle
-      [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
-        this.playTone(freq, 'sine', 0.15, 0.2, i * 0.1);
+      // Pleasant, grave success sound
+      // G3 Major Triad (G3, B3, D4)
+      [196.00, 246.94, 293.66].forEach((freq, i) => {
+        this.playTone(freq, 'sine', 0.3, 0.3, i * 0.15);
       });
-      this.playTone(1046.50, 'square', 0.4, 0.2, 0.4);
+      // Final resolving note
+      this.playTone(392.00, 'sine', 0.6, 0.3, 0.45); 
   }
 
   playShake() {

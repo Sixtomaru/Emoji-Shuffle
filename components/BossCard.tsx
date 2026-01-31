@@ -5,9 +5,10 @@ interface BossCardProps {
   boss: Boss;
   shake: boolean;
   damageTaken: number | null;
+  isDefeated?: boolean; // New prop for defeat animation
 }
 
-const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken }) => {
+const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeated }) => {
   const [imgError, setImgError] = useState(false);
   const hpPercentage = Math.max(0, (boss.currentHp / boss.maxHp) * 100);
 
@@ -23,7 +24,10 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken }) => {
 
       {/* Main Container for Boss Image */}
       <div className={`relative transition-transform duration-100 ${shake ? 'animate-shake-violent' : ''}`}>
-        <div className={`w-32 h-32 md:w-40 md:h-40 flex items-center justify-center filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)] ${!shake ? 'animate-float-boss' : ''}`}>
+        <div className={`w-32 h-32 md:w-40 md:h-40 flex items-center justify-center filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)] 
+            ${!shake && !isDefeated ? 'animate-float-boss' : ''} 
+            ${isDefeated ? 'animate-defeat-spin' : ''}
+        `}>
             {boss.image && !imgError ? (
                 <img 
                     src={boss.image} 
@@ -35,6 +39,13 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken }) => {
                 <span className="text-9xl">{boss.emoji}</span>
             )}
         </div>
+        
+        {/* Smoke Effect triggers when defeated */}
+        {isDefeated && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                 <div className="w-40 h-40 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.8)_0%,rgba(255,255,255,0)_70%)] animate-poof opacity-0" style={{ animationDelay: '0.8s' }}></div>
+            </div>
+        )}
         
         {damageTaken && (
            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-5xl font-black text-red-500 damage-float pointer-events-none z-50 drop-shadow-[0_2px_0_white]">
@@ -77,6 +88,21 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken }) => {
          }
          .animate-shake-violent {
             animation: shake-violent 0.4s ease-in-out;
+         }
+         @keyframes defeat-spin {
+            0% { transform: scale(1) rotate(0deg); opacity: 1; }
+            20% { transform: scale(1.1) rotate(-10deg); opacity: 1; }
+            100% { transform: scale(0) rotate(720deg); opacity: 0; }
+         }
+         .animate-defeat-spin {
+            animation: defeat-spin 1s ease-in forwards;
+         }
+         @keyframes poof {
+            0% { transform: scale(0.5); opacity: 0.8; }
+            100% { transform: scale(1.5); opacity: 0; }
+         }
+         .animate-poof {
+            animation: poof 0.5s ease-out forwards;
          }
       `}</style>
     </div>

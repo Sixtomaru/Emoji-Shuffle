@@ -1,45 +1,41 @@
-import { TileData, GRID_WIDTH, GRID_HEIGHT, Boss, TileStatus } from "../types";
+import { TileData, GRID_WIDTH, GRID_HEIGHT, Boss } from "../types";
 
 export interface MatchGroup {
   ids: string[];
-  points: number;
-  type: string; 
+  type: string;
   center: { x: number, y: number };
+  direction: 'horizontal' | 'vertical'; 
 }
 
 export interface MatchResult {
   groups: MatchGroup[];
   allMatchedIds: string[];
-  totalPoints: number;
-  clearedObstacles: string[]; // IDs of rocks/ice cleared
 }
 
 let globalUniqueCounter = 0;
-const generateId = (x: number, prefix: string = '') => {
+const generateId = (prefix: string = 't') => {
   globalUniqueCounter++;
-  return `${prefix}-${x}-${Date.now()}-${globalUniqueCounter}-${Math.random().toString(36).substring(2, 9)}`;
+  return `${prefix}_${Date.now()}_${globalUniqueCounter}`;
 };
 
-// Create board using the player's team
 export const createBoard = (team: Boss[]): TileData[] => {
   const board: TileData[] = [];
-  for (let y = 0; y < GRID_HEIGHT; y++) {
-    for (let x = 0; x < GRID_WIDTH; x++) {
+  for (let x = 0; x < GRID_WIDTH; x++) {
+    for (let y = 0; y < GRID_HEIGHT; y++) {
       let monster = team[Math.floor(Math.random() * team.length)];
       
-      // Basic check to prevent initial matches
       let attempts = 0;
       while (attempts < 50) {
         let conflict = false;
         if (x >= 2) {
-           const left1 = board[y * GRID_WIDTH + (x - 1)];
-           const left2 = board[y * GRID_WIDTH + (x - 2)];
-           if (left1.monsterId === monster.id && left2.monsterId === monster.id) conflict = true;
+           const left1 = board.find(t => t.x === x - 1 && t.y === y);
+           const left2 = board.find(t => t.x === x - 2 && t.y === y);
+           if (left1?.monsterId === monster.id && left2?.monsterId === monster.id) conflict = true;
         }
         if (!conflict && y >= 2) {
-           const up1 = board[(y - 1) * GRID_WIDTH + x];
-           const up2 = board[(y - 2) * GRID_WIDTH + x];
-           if (up1.monsterId === monster.id && up2.monsterId === monster.id) conflict = true;
+           const up1 = board.find(t => t.x === x && t.y === y - 1);
+           const up2 = board.find(t => t.x === x && t.y === y - 2);
+           if (up1?.monsterId === monster.id && up2?.monsterId === monster.id) conflict = true;
         }
         if (!conflict) break;
         monster = team[Math.floor(Math.random() * team.length)];
@@ -47,11 +43,11 @@ export const createBoard = (team: Boss[]): TileData[] => {
       }
 
       board.push({
-        id: generateId(x, 'init'),
+        id: generateId(`init_${x}_${y}`),
         monsterId: monster.id,
         type: monster.type,
         emoji: monster.emoji,
-        image: monster.image, // Pass image
+        image: monster.image,
         isMatched: false,
         x,
         y,
@@ -62,200 +58,147 @@ export const createBoard = (team: Boss[]): TileData[] => {
   return board;
 };
 
-export const getTileAt = (board: TileData[], x: number, y: number): TileData | undefined => {
-  if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) return undefined;
-  return board.find((t) => t.x === x && t.y === y);
-};
-
 export const findMatches = (board: TileData[]): MatchResult => {
   const groups: MatchGroup[] = [];
-  const processedInCurrentPass = new Set<string>(); 
-  const clearedObstacles: string[] = [];
+  const processedIds = new Set<string>();
 
-  const addGroup = (tiles: TileData[]) => {
-    // STRICT RULE: Steel blocks (status === 'steel') CANNOT participate in matches.
-    const validTiles = tiles.filter(t => t.status !== 'rock' && t.status !== 'steel');
-    
-    if (validTiles.length < 3) return;
-
-    const ids = validTiles.map(t => t.id);
-    const uniqueIds = ids.filter(id => !processedInCurrentPass.has(id));
-    if (uniqueIds.length === 0) return;
-    
-    uniqueIds.forEach(id => processedInCurrentPass.add(id));
-    
-    // Check for ADJACENT ROCKS/ICE to break
-    validTiles.forEach(t => {
-        const neighbors = [
-            getTileAt(board, t.x + 1, t.y),
-            getTileAt(board, t.x - 1, t.y),
-            getTileAt(board, t.x, t.y + 1),
-            getTileAt(board, t.x, t.y - 1),
-        ];
-        neighbors.forEach(n => {
-            // Normal matches break adjacent Rocks
-            if (n && n.status === 'rock' && !clearedObstacles.includes(n.id)) {
-                clearedObstacles.push(n.id);
-            }
-        });
-    });
-
-    groups.push({
-      ids: ids,
-      type: validTiles[0].monsterId, 
-      points: validTiles.length * 100,
-      center: { x: validTiles[Math.floor(validTiles.length/2)].x, y: validTiles[Math.floor(validTiles.length/2)].y }
-    });
-  };
-
-  // Horizontal Scans
-  for (let y = 0; y < GRID_HEIGHT; y++) {
-    let currentId = null;
-    let currentRun: TileData[] = [];
-    
-    for (let x = 0; x < GRID_WIDTH; x++) {
-      const tile = getTileAt(board, x, y);
-      const isMatchable = tile && tile.status !== 'rock' && tile.status !== 'steel';
-      
-      if (isMatchable && tile.monsterId === currentId) {
-        currentRun.push(tile);
-      } else {
-        if (currentRun.length >= 3) addGroup(currentRun);
-        currentId = isMatchable ? tile.monsterId : null;
-        currentRun = isMatchable ? [tile] : [];
-      }
-    }
-    if (currentRun.length >= 3) addGroup(currentRun);
-  }
-
-  // Vertical Scans
-  for (let x = 0; x < GRID_WIDTH; x++) {
-    let currentId = null;
-    let currentRun: TileData[] = [];
-    
-    for (let y = 0; y < GRID_HEIGHT; y++) {
-      const tile = getTileAt(board, x, y);
-      const isMatchable = tile && tile.status !== 'rock' && tile.status !== 'steel';
-
-      if (isMatchable && tile.monsterId === currentId) {
-        currentRun.push(tile);
-      } else {
-        if (currentRun.length >= 3) addGroup(currentRun);
-        currentId = isMatchable ? tile.monsterId : null;
-        currentRun = isMatchable ? [tile] : [];
-      }
-    }
-    if (currentRun.length >= 3) addGroup(currentRun);
-  }
-
-  const allMatchedIds = Array.from(new Set([...groups.flatMap(g => g.ids), ...clearedObstacles]));
-  
-  return {
-    groups,
-    allMatchedIds,
-    totalPoints: 0,
-    clearedObstacles
-  };
-};
-
-export const resolveMatches = (
-  board: TileData[],
-  matchedIds: string[],
-  team: Boss[],
-  decreaseSteel: boolean 
-): { newBoard: TileData[] } => {
-  
-  let grid: (TileData | null)[][] = Array(GRID_WIDTH).fill(null).map(() => Array(GRID_HEIGHT).fill(null));
-
+  // Create grid for easy access
+  const grid: (TileData | null)[][] = Array(GRID_WIDTH).fill(null).map(() => Array(GRID_HEIGHT).fill(null));
   board.forEach(t => {
-      if (matchedIds.includes(t.id)) {
-          grid[t.x][t.y] = null;
-      } else {
-          if (decreaseSteel && t.status === 'steel' && t.statusLife !== undefined) {
-              const newLife = t.statusLife - 1;
-              if (newLife <= 0) {
-                   grid[t.x][t.y] = { ...t, status: 'normal', statusLife: undefined, id: t.id + '_broken' };
-              } else {
-                   grid[t.x][t.y] = { ...t, statusLife: newLife };
-              }
-          } else {
-              grid[t.x][t.y] = t;
-          }
+      if (t.x >= 0 && t.x < GRID_WIDTH && t.y >= 0 && t.y < GRID_HEIGHT) {
+          grid[t.x][t.y] = t;
       }
   });
 
-  const finalBoard: TileData[] = [];
+  const isValidTile = (t: TileData | null) => t && t.status !== 'rock' && t.status !== 'steel';
 
+  // 1. SCAN HORIZONTALS
+  for (let y = 0; y < GRID_HEIGHT; y++) {
+      let matchLen = 1;
+      for (let x = 0; x < GRID_WIDTH; x++) {
+          const current = grid[x][y];
+          const next = (x < GRID_WIDTH - 1) ? grid[x+1][y] : null;
+
+          if (isValidTile(current) && isValidTile(next) && current!.monsterId === next!.monsterId) {
+              matchLen++;
+          } else {
+              if (matchLen >= 3) {
+                  const ids: string[] = [];
+                  for (let k = 0; k < matchLen; k++) {
+                      const t = grid[x - k][y];
+                      if (t) ids.push(t.id);
+                  }
+                  
+                  // Unique signature for this specific match group
+                  const sig = `h|${ids.sort().join('|')}`;
+                  if (!processedIds.has(sig)) {
+                      processedIds.add(sig);
+                      const tiles = ids.map(id => board.find(b => b.id === id)!);
+                      const sortedTiles = tiles.sort((a,b) => a.x - b.x);
+                      
+                      groups.push({
+                          ids: ids,
+                          type: sortedTiles[0].monsterId,
+                          center: sortedTiles[Math.floor(sortedTiles.length / 2)],
+                          direction: 'horizontal'
+                      });
+                  }
+              }
+              matchLen = 1;
+          }
+      }
+  }
+
+  // 2. SCAN VERTICALS
   for (let x = 0; x < GRID_WIDTH; x++) {
-      const col = grid[x];
-      const newCol: (TileData | null)[] = new Array(GRID_HEIGHT).fill(null);
-      let writeY = GRID_HEIGHT - 1;
-      
-      // Ice stays fixed
-      for (let y = GRID_HEIGHT - 1; y >= 0; y--) {
-          const tile = col[y];
-          if (tile && tile.status === 'ice') {
-              newCol[y] = { ...tile, x, y }; 
-          }
-      }
-
-      // Fill non-ice slots
-      let targetY = GRID_HEIGHT - 1;
-      for (let y = GRID_HEIGHT - 1; y >= 0; y--) {
-          if (newCol[targetY] && newCol[targetY]?.status === 'ice') {
-              targetY--;
-              if (y === targetY + 1) continue; 
-          }
-          
-          if (targetY < 0) break;
-
-          const tile = col[y];
-
-          if (tile && tile.status === 'ice') {
-               targetY = y - 1;
-          } else if (tile) {
-              while (targetY >= 0 && newCol[targetY]?.status === 'ice') {
-                  targetY--;
-              }
-              
-              if (targetY >= 0) {
-                  newCol[targetY] = { ...tile, x, y: targetY };
-                  targetY--;
-              }
-          }
-      }
-
-      // Spawning Logic
-      let blocked = false;
+      let matchLen = 1;
       for (let y = 0; y < GRID_HEIGHT; y++) {
-          if (newCol[y] && newCol[y]?.status === 'ice') {
-              blocked = true;
-          }
-          
-          if (!newCol[y]) {
-              if (!blocked) {
-                  const monster = team[Math.floor(Math.random() * team.length)];
-                  newCol[y] = {
-                      id: generateId(x, 'new'),
-                      monsterId: monster.id,
-                      type: monster.type,
-                      emoji: monster.emoji,
-                      image: monster.image, // Pass image
-                      isMatched: false,
-                      x: x,
-                      y: y,
-                      status: 'normal'
-                  };
+          const current = grid[x][y];
+          const next = (y < GRID_HEIGHT - 1) ? grid[x][y+1] : null;
+
+          if (isValidTile(current) && isValidTile(next) && current!.monsterId === next!.monsterId) {
+              matchLen++;
+          } else {
+              if (matchLen >= 3) {
+                  const ids: string[] = [];
+                  for (let k = 0; k < matchLen; k++) {
+                      const t = grid[x][y - k];
+                      if (t) ids.push(t.id);
+                  }
+
+                  const sig = `v|${ids.sort().join('|')}`;
+                  if (!processedIds.has(sig)) {
+                      processedIds.add(sig);
+                      const tiles = ids.map(id => board.find(b => b.id === id)!);
+                      const sortedTiles = tiles.sort((a,b) => a.y - b.y);
+
+                      groups.push({
+                          ids: ids,
+                          type: sortedTiles[0].monsterId,
+                          center: sortedTiles[Math.floor(sortedTiles.length / 2)],
+                          direction: 'vertical'
+                      });
+                  }
               }
+              matchLen = 1;
           }
       }
-      
-      newCol.forEach(t => {
-          if (t) finalBoard.push(t);
-      });
   }
   
-  return { newBoard: finalBoard };
+  // Note: We intentionally do NOT merge intersecting groups here anymore.
+  // A cross will return 1 Horizontal group AND 1 Vertical group.
+
+  const allMatchedIds = Array.from(new Set(groups.flatMap(g => g.ids)));
+  return { groups, allMatchedIds };
+};
+
+// --- STABLE GRAVITY (STACK LOGIC) ---
+export const applyGravity = (
+    currentBoard: TileData[], 
+    idsToRemove: string[], 
+    team: Boss[]
+): TileData[] => {
+    const nextBoard: TileData[] = [];
+
+    // Process COLUMN BY COLUMN
+    for (let x = 0; x < GRID_WIDTH; x++) {
+        // 1. Get tiles in this column that are NOT being removed
+        // Sort by Y ascending (0 is top, 5 is bottom) to preserve order
+        const existingInCol = currentBoard
+            .filter(t => t.x === x && !idsToRemove.includes(t.id))
+            .sort((a, b) => a.y - b.y);
+
+        // 2. How many slots do we need to fill?
+        const missingCount = GRID_HEIGHT - existingInCol.length;
+
+        // 3. Generate NEW tiles for the TOP slots (0 to missingCount - 1)
+        for (let i = 0; i < missingCount; i++) {
+            const monster = team[Math.floor(Math.random() * team.length)];
+            nextBoard.push({
+                id: generateId(`spawn_c${x}_${i}`),
+                monsterId: monster.id,
+                type: monster.type,
+                emoji: monster.emoji,
+                image: monster.image,
+                isMatched: false,
+                x: x,
+                y: i, // New tiles start at top
+                status: 'normal'
+            });
+        }
+
+        // 4. Shift EXISTING tiles down (missingCount to GRID_HEIGHT)
+        existingInCol.forEach((tile, index) => {
+            nextBoard.push({
+                ...tile,
+                x: x,
+                y: missingCount + index, // Shift down
+                isMatched: false 
+            });
+        });
+    }
+
+    return nextBoard;
 };
 
 export const applyInterference = (board: TileData[], type: 'rock' | 'ice' | 'steel'): TileData[] => {
@@ -263,21 +206,17 @@ export const applyInterference = (board: TileData[], type: 'rock' | 'ice' | 'ste
     if (targets.length === 0) return board;
 
     const count = Math.min(targets.length, Math.floor(Math.random() * 3) + 2);
-    const chosenIds = new Set<string>();
-    
-    for (let i = 0; i < count; i++) {
-        const idx = Math.floor(Math.random() * targets.length);
-        chosenIds.add(targets[idx].id);
-        targets.splice(idx, 1);
-    }
+    const shuffled = targets.sort(() => 0.5 - Math.random());
+    const affected = new Set(shuffled.slice(0, count).map(t => t.id));
 
     return board.map(t => {
-        if (chosenIds.has(t.id)) {
+        if (affected.has(t.id)) {
             return {
                 ...t,
                 status: type,
                 statusLife: type === 'steel' ? 5 : undefined,
-                id: t.id + '_mod' 
+                monsterId: `obstacle_${type}`,
+                emoji: type === 'rock' ? '🪨' : type === 'ice' ? '🧊' : '⚙️',
             };
         }
         return t;

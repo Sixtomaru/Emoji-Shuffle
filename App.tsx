@@ -6,10 +6,10 @@ import TeamSelector from './components/TeamSelector';
 import MainMenu from './components/MainMenu';
 import CaptureModal from './components/CaptureModal';
 import { GameState, TileData, Boss, FloatingText, ElementType, SkillType } from './types';
-import { createBoard, findMatches, resolveMatches, applyInterference } from './utils/gameLogic';
+import { createBoard, findMatches, applyGravity, applyInterference, MatchGroup } from './utils/gameLogic';
 import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS } from './constants';
 import { soundManager } from './utils/sound';
-import { Skull, Zap, RotateCcw, X, LogOut } from 'lucide-react';
+import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2 } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- Game State ---
@@ -20,17 +20,24 @@ const App: React.FC = () => {
   const [collection, setCollection] = useState<Boss[]>([MONSTER_DB[0], MONSTER_DB[1], MONSTER_DB[2], MONSTER_DB[3]]);
   const [team, setTeam] = useState<Boss[]>([MONSTER_DB[0], MONSTER_DB[1], MONSTER_DB[2], MONSTER_DB[3]]);
   const [isFinalBossMode, setIsFinalBossMode] = useState(false);
+  const [levelPlan, setLevelPlan] = useState<Boss[]>([]);
   
   // --- Battle State ---
-  const [nextPreviewEnemy, setNextPreviewEnemy] = useState<Boss>(MONSTER_DB[4]); // Store the specific enemy for the level
+  const [nextPreviewEnemy, setNextPreviewEnemy] = useState<Boss>(MONSTER_DB[4]); 
   const [board, setBoard] = useState<TileData[]>([]);
   const [enemy, setEnemy] = useState<Boss>(MONSTER_DB[4]);
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
+  
+  // Lock input during animations
   const [isProcessing, setIsProcessing] = useState(false);
+  const [stageCleared, setStageCleared] = useState(false); // New state for overlay
+  const [showFinishMessage, setShowFinishMessage] = useState(false); // State for "¡YA ESTÁ!"
+  
   const [comboCount, setComboCount] = useState(0);
   const [skillCharges, setSkillCharges] = useState<Record<string, number>>({});
   const [showSkillMenu, setShowSkillMenu] = useState(false);
   const [victoryAnim, setVictoryAnim] = useState(false);
+  const [isDefeatedAnim, setIsDefeatedAnim] = useState(false); // Animation state for boss dying
   
   // --- Visuals ---
   const [bossShake, setBossShake] = useState(false);
@@ -46,11 +53,9 @@ const App: React.FC = () => {
   const [viewingMonster, setViewingMonster] = useState<Boss | null>(null);
   const [showQuitConfirmation, setShowQuitConfirmation] = useState(false);
 
-  // --- Refs ---
   const bossRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
-  // --- FULLSCREEN HELPER ---
   const enterFullscreen = () => {
       try {
         const elem = document.documentElement;
@@ -62,49 +67,45 @@ const App: React.FC = () => {
       }
   };
 
-  // --- HELPER: Pick Enemy & Calculate HP ---
-  const getScaledEnemy = (lvl: number, isFinal: boolean) => {
-      let enemyTemplate: Boss;
-      
-      if (isFinal) {
-          enemyTemplate = SECRET_BOSS;
-      } else if (lvl === 10) {
-          enemyTemplate = MONSTER_DB.find(m => m.id === "m010")!;
-      } else if (lvl === 20) {
-          enemyTemplate = MONSTER_DB.find(m => m.id === "m020")!;
-      } else if (lvl === 30) {
-          enemyTemplate = MONSTER_DB.find(m => m.id === "m030")!;
-      } else {
-          const nonBosses = MONSTER_DB.filter(m => m.id !== "m010" && m.id !== "m020" && m.id !== "m030");
-          enemyTemplate = nonBosses[Math.floor(Math.random() * nonBosses.length)];
-      }
-
-      // CALCULATE HP GRADUALLY
-      let scaledHp = enemyTemplate.maxHp;
-      
+  const scaleEnemyHp = (baseEnemy: Boss, lvl: number, isFinal: boolean): Boss => {
+      let scaledHp = baseEnemy.maxHp;
       if (isFinal) {
           scaledHp = 50000;
       } else if (lvl === 10 || lvl === 20 || lvl === 30) {
-          scaledHp = enemyTemplate.maxHp;
+          scaledHp = baseEnemy.maxHp; 
       } else {
-          // Formula: Base 800 + (Level * 320)
           scaledHp = 800 + (lvl * 320);
       }
-
-      return { 
-          ...enemyTemplate, 
-          maxHp: scaledHp,
-          currentHp: scaledHp
-      };
+      return { ...baseEnemy, maxHp: scaledHp, currentHp: scaledHp };
   };
 
-  // --- Init ---
   const handleStartArcade = () => {
       enterFullscreen();
       setIsFinalBossMode(false);
-      const startLvl = 1;
-      setLevel(startLvl);
-      setNextPreviewEnemy(getScaledEnemy(startLvl, false)); // Set correctly scaled enemy
+      const fixedBossIds = ["m010", "m020", "m030"];
+      const nonBosses = MONSTER_DB.filter(m => !fixedBossIds.includes(m.id));
+      for (let i = nonBosses.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [nonBosses[i], nonBosses[j]] = [nonBosses[j], nonBosses[i]];
+      }
+      const plan: Boss[] = [];
+      let nonBossIdx = 0;
+      for (let i = 1; i <= 30; i++) {
+          if (i === 10) plan.push(MONSTER_DB.find(m => m.id === "m010")!);
+          else if (i === 20) plan.push(MONSTER_DB.find(m => m.id === "m020")!);
+          else if (i === 30) plan.push(MONSTER_DB.find(m => m.id === "m030")!);
+          else {
+              if (nonBossIdx < nonBosses.length) {
+                  plan.push(nonBosses[nonBossIdx]);
+                  nonBossIdx++;
+              } else {
+                  plan.push(nonBosses[0]); 
+              }
+          }
+      }
+      setLevelPlan(plan);
+      setLevel(1);
+      setNextPreviewEnemy(scaleEnemyHp(plan[0], 1, false)); 
       setMovesLeft(INITIAL_MOVES);
       setMovesAtStart(INITIAL_MOVES);
       setAppState('team_select');
@@ -116,7 +117,7 @@ const App: React.FC = () => {
       setIsFinalBossMode(true);
       const startLvl = 999;
       setLevel(startLvl);
-      setNextPreviewEnemy(getScaledEnemy(startLvl, true));
+      setNextPreviewEnemy(scaleEnemyHp(SECRET_BOSS, startLvl, true));
       setMovesLeft(20);
       setMovesAtStart(20);
       setAppState('team_select');
@@ -140,13 +141,16 @@ const App: React.FC = () => {
   };
 
   const startLevel = () => {
-      setEnemy(nextPreviewEnemy); // Use the already calculated one
+      setEnemy(nextPreviewEnemy);
       setMovesAtStart(movesLeft);
       setBoard(createBoard(team));
       setAppState('playing');
       setSkillCharges({});
       setIsProcessing(false);
       setVictoryAnim(false);
+      setIsDefeatedAnim(false);
+      setStageCleared(false);
+      setShowFinishMessage(false);
       setImgError(false);
   };
 
@@ -168,312 +172,210 @@ const App: React.FC = () => {
           setAppState('victory'); 
           return;
       }
-      
       if (level >= 30) {
           soundManager.playWin();
           setAppState('victory'); 
       } else {
-          // Prepare NEXT level
           const nextLvl = level + 1;
           setLevel(nextLvl);
-          // Pick NEXT enemy now and freeze it in state with correct HP
-          setNextPreviewEnemy(getScaledEnemy(nextLvl, false));
-          
+          const baseEnemy = levelPlan[nextLvl - 1]; 
+          setNextPreviewEnemy(scaleEnemyHp(baseEnemy, nextLvl, false));
           setMovesLeft(m => m + MOVES_PER_LEVEL);
           setAppState('team_select');
       }
   };
-
-  // --- Core Loop ---
-  const processBoard = useCallback(async (currentBoard: TileData[], startLoopCount = 0, isTurnEnd = false) => {
-    setIsProcessing(true);
-    let processingBoard = currentBoard;
-    let keepChecking = true;
-    let loopCount = startLoopCount;
-    let turnDamage = 0;
-    
-    // TRACK DEATH LOCALLY to prevent interference logic issues even if state hasn't updated
-    let isDead = enemy.currentHp <= 0;
-    let accumulatedDamage = 0;
-
-    if (loopCount === 0) await new Promise(r => setTimeout(r, 200));
-
-    while (keepChecking && loopCount < 10) {
-      
-      const { groups, allMatchedIds, clearedObstacles } = findMatches(processingBoard);
-      
-      if (allMatchedIds.length > 0) {
-        
-        // Update combo immediately for UI responsiveness
-        if (loopCount > 0) setComboCount(loopCount + 1);
-
-        let comboMultiplier = 1 + (loopCount * 0.2);
-
-        const clearedTypes = new Set(allMatchedIds.map(id => processingBoard.find(t => t.id === id)?.status));
-        if (clearedTypes.has('rock')) soundManager.playRockBreak();
-        if (clearedTypes.has('ice')) soundManager.playIceBreak();
-
-        for (const group of groups) {
-            const size = group.ids.length;
-            soundManager.playMatch(loopCount);
-
-            const attacker = team.find(m => m.id === group.type);
-            if (attacker) {
-                setSkillCharges(prev => {
-                    const current = prev[attacker.id] || 0;
-                    return {
-                        ...prev,
-                        [attacker.id]: Math.min(attacker.skillCost, current + group.ids.length)
-                    };
-                });
-
-                let baseDmg = 100 * size; 
-                if (size === 4) baseDmg *= 1.2;
-                if (size >= 5) baseDmg *= 1.5;
-
-                let damage = baseDmg;
-                const weaknesses = TYPE_CHART[attacker.type];
-                if (weaknesses.includes(enemy.type)) damage *= 1.5;
-                
-                damage = Math.floor(damage * comboMultiplier);
-                turnDamage += damage;
-                accumulatedDamage += damage;
-
-                const colorMap: Record<string, string> = { 'Fuego': '#ef4444', 'Agua': '#3b82f6', 'Planta': '#22c55e', 'Eléctrico': '#eab308' };
-                const fontScale = size >= 5 ? 2.5 : size === 4 ? 1.8 : 1.2;
-                addFloatingText(group.center.x, group.center.y, `${damage}`, colorMap[attacker.type] || 'white', fontScale);
-                
-                fireProjectile(group.center.x, group.center.y, colorMap[attacker.type] || '#ffffff');
-            }
-        }
-
-        // Apply damage immediately
-        applyDamage(turnDamage);
-        
-        // CHECK DEATH LOCALLY but DO NOT RETURN. Continue combo to look cool.
-        if (enemy.currentHp - accumulatedDamage <= 0 && !isDead) {
-             isDead = true;
-             setVictoryAnim(true);
-        }
-
-        const markedBoard = processingBoard.map(t => 
-            allMatchedIds.includes(t.id) ? { ...t, isMatched: true } : t
-        );
-        setBoard(markedBoard);
-        
-        await new Promise(r => setTimeout(r, 300));
-
-        const shouldDecreaseSteel = isTurnEnd && loopCount === 0;
-        const { newBoard } = resolveMatches(processingBoard, allMatchedIds, team, shouldDecreaseSteel);
-        
-        processingBoard = newBoard;
-        setBoard([...processingBoard]); 
-        
-        await new Promise(r => setTimeout(r, 400));
-        loopCount++;
-        turnDamage = 0; 
-      } else {
-        keepChecking = false;
-      }
-    }
-
-    setComboCount(0);
-    setIsProcessing(false);
-
-    // END OF TURN LOGIC
-    if (isDead) {
-         // Victory Sequence
-         setTimeout(() => {
-             setVictoryAnim(false);
-             if (isFinalBossMode) {
-                  setAppState('victory'); 
-             } else if (collection.some(m => m.name === enemy.name)) {
-                  advanceLevel();
-             } else {
-                  setAppState('capture');
-             }
-         }, 1500); // Small delay to let victory sink in
-    } else {
-         // Enemy Still Alive Logic
-         // --- CHECK GAME OVER HERE ---
-         if (movesLeft <= 0 && isTurnEnd) {
-             setAppState('gameover');
-             soundManager.playLose();
-             return;
-         }
-
-         // Interference Check - ONLY if alive
-         const interferenceChance = isFinalBossMode ? 0.7 : 0.4;
-         if (isTurnEnd && Math.random() < interferenceChance) {
-            setTimeout(() => {
-                const type = enemy.type === 'Hielo' ? 'ice' : enemy.type === 'Acero' ? 'steel' : 'rock';
-                setBoard(prev => applyInterference(prev, type));
-                soundManager.playLose(); 
-                
-                addFloatingText(2.5, 2.5, "¡INTERFERENCIA!", "#f87171", 2);
-                setBossShake(true); 
-                setBoardShake(true); 
-                setTimeout(() => {
-                    setBossShake(false);
-                    setBoardShake(false);
-                }, 500);
-            }, 500);
-         }
-    }
-
-  }, [team, enemy, collection, isFinalBossMode, movesLeft]); 
 
   const applyDamage = (amount: number) => {
       if (amount <= 0) return;
       setLastDamage(amount);
       setBossShake(true);
       setTimeout(() => { setBossShake(false); setLastDamage(null); }, 200);
-
-      setEnemy(prev => ({
-          ...prev,
-          currentHp: Math.max(0, prev.currentHp - amount)
-      }));
+      setEnemy(prev => ({ ...prev, currentHp: Math.max(0, prev.currentHp - amount) }));
   };
 
-  const handleSwap = async (id1: string, id2: string) => {
-    // LOCK IF DEAD
-    if (isProcessing || movesLeft <= 0 || appState !== 'playing' || enemy.currentHp <= 0) return;
-    if (id1 === id2) { setSelectedTileId(prev => prev === id1 ? null : id1); return; }
+  // --- LOGIC: PROCESS MATCHES SEQUENTIALLY ---
+  const processMatches = async (startBoard: TileData[], startCombo: number, priorityTileId: string | null = null) => {
+      let currentBoard = startBoard;
+      let combo = startCombo;
+      let currentBossHp = enemy.currentHp; 
+      let hasWon = currentBossHp <= 0;
 
-    const t1 = board.find(t => t.id === id1);
-    const t2 = board.find(t => t.id === id2);
+      while (true) {
+          // 1. Find all matches in current state
+          const { groups } = findMatches(currentBoard);
+          if (groups.length === 0) break;
 
-    if (t1 && t2) {
-        if (t1.status === 'rock' || t1.status === 'steel' || t1.status === 'ice' || 
-            t2.status === 'rock' || t2.status === 'steel' || t2.status === 'ice') return;
+          // 2. Sort groups (Horizontal first, then vertical)
+          groups.sort((a, b) => {
+              // Priority 1: User interact tile
+              const aHasPriority = priorityTileId && a.ids.includes(priorityTileId);
+              const bHasPriority = priorityTileId && b.ids.includes(priorityTileId);
+              if (aHasPriority && !bHasPriority) return -1;
+              if (!aHasPriority && bHasPriority) return 1;
 
-        soundManager.playSwap();
-        setIsProcessing(true);
-        setSelectedTileId(null);
-        setMovesLeft(prev => prev - 1); 
+              // Priority 2: Horizontal before Vertical
+              if (a.direction === 'horizontal' && b.direction === 'vertical') return -1;
+              if (a.direction === 'vertical' && b.direction === 'horizontal') return 1;
 
-        const tempBoard = board.map(t => {
-          if (t.id === t1.id) return { ...t, x: t2.x, y: t2.y };
-          if (t.id === t2.id) return { ...t, x: t1.x, y: t1.y };
-          return t;
+              return a.center.y - b.center.y;
+          });
+
+          // 3. Process ALL groups in the current static board sequentially
+          const currentBatchIdsRemoved = new Set<string>();
+          
+          for (const targetGroup of groups) {
+             targetGroup.ids.forEach(id => currentBatchIdsRemoved.add(id));
+
+             // Update Combo UI
+             setComboCount(combo);
+             
+             // Mark as matched visually
+             setBoard(prev => prev.map(t => currentBatchIdsRemoved.has(t.id) ? { ...t, isMatched: true } : t));
+
+             // Damage Logic
+             const attacker = team.find(m => m.id === targetGroup.type);
+             if (attacker) {
+                   const size = targetGroup.ids.length; 
+                   setSkillCharges(prev => ({ ...prev, [attacker.id]: Math.min(attacker.skillCost, (prev[attacker.id] || 0) + size) }));
+                   let dmg = 100 * size;
+                   if (size >= 4) dmg *= 1.2;
+                   if (size >= 5) dmg *= 1.5;
+                   if (TYPE_CHART[attacker.type].includes(enemy.type)) dmg *= 1.5;
+                   dmg = Math.floor(dmg * (1 + (combo * 0.2)));
+                   
+                   const wasAlive = currentBossHp > 0;
+                   if (dmg > 0) {
+                       currentBossHp = Math.max(0, currentBossHp - dmg);
+                       applyDamage(dmg);
+                   }
+                   
+                   if (wasAlive && currentBossHp <= 0) {
+                       setShowFinishMessage(true);
+                       soundManager.playWin();
+                       await new Promise(r => setTimeout(r, 2000));
+                       setShowFinishMessage(false);
+                       hasWon = true;
+                   }
+
+                   const colorMap: Record<string, string> = { 'Fuego': '#ef4444', 'Agua': '#3b82f6', 'Planta': '#22c55e', 'Eléctrico': '#eab308' };
+                   const centerTile = targetGroup.center; 
+                   
+                   setTimeout(() => {
+                       addFloatingText(centerTile.x, centerTile.y - 0.5, `${dmg}`, colorMap[attacker.type] || 'white');
+                   }, 100);
+                   
+                   fireProjectile(centerTile.x, centerTile.y, colorMap[attacker.type] || 'white');
+             }
+             soundManager.playMatch(combo);
+             
+             await new Promise(r => setTimeout(r, 200));
+             
+             combo++;
+          }
+
+          // 4. Apply Gravity ONCE
+          const boardAfterFall = applyGravity(currentBoard, Array.from(currentBatchIdsRemoved), team);
+          setBoard(boardAfterFall);
+          currentBoard = boardAfterFall;
+
+          await new Promise(r => setTimeout(r, 350));
+      }
+
+      if (hasWon) {
+          await new Promise(r => setTimeout(r, 2000));
+          setIsDefeatedAnim(true);
+          await new Promise(r => setTimeout(r, 1500));
+          
+          setIsProcessing(false);
+          setComboCount(0);
+          
+          if (isFinalBossMode) setAppState('victory');
+          else if (collection.some(m => m.name === enemy.name)) advanceLevel();
+          else setAppState('capture');
+      } 
+      else {
+          setTimeout(() => setComboCount(0), 1000);
+          setIsProcessing(false);
+          if (movesLeft <= 0) {
+              setAppState('gameover');
+              soundManager.playLose();
+          }
+      }
+  };
+
+  const handleMove = async (id: string, targetX: number, targetY: number) => {
+    if (isProcessing || movesLeft <= 0 || showFinishMessage || enemy.currentHp <= 0) return;
+
+    const sourceTile = board.find(t => t.id === id);
+    if (!sourceTile) return;
+
+    if (sourceTile.x === targetX && sourceTile.y === targetY) {
+         setSelectedTileId(prev => prev === id ? null : id); 
+         return; 
+    }
+
+    const targetTile = board.find(t => t.x === targetX && t.y === targetY);
+    
+    let tempBoard = [...board];
+    if (targetTile) {
+        tempBoard = tempBoard.map(t => {
+            if (t.id === sourceTile.id) return { ...t, x: targetX, y: targetY };
+            if (t.id === targetTile.id) return { ...t, x: sourceTile.x, y: sourceTile.y };
+            return t;
         });
-        setBoard(tempBoard);
+    } else {
+        tempBoard = tempBoard.map(t => t.id === sourceTile.id ? { ...t, x: targetX, y: targetY } : t);
+    }
 
-        const { allMatchedIds } = findMatches(tempBoard);
-        if (allMatchedIds.length > 0) {
-            await processBoard(tempBoard, 0, true);
-        } else {
-            await new Promise(r => setTimeout(r, 250));
-            const revertedBoard = tempBoard.map(t => {
-                if (t.id === t1.id) return { ...t, x: t1.x, y: t1.y };
-                if (t.id === t2.id) return { ...t, x: t2.x, y: t2.y };
-                return t;
-            });
-            setBoard(revertedBoard);
-            setIsProcessing(false);
-            
-            // Check loss on invalid move too if it was last move
-            if (movesLeft - 1 <= 0 && enemy.currentHp > 0) {
-                setAppState('gameover');
-                soundManager.playLose();
-            }
-        }
+    const { groups } = findMatches(tempBoard);
+    
+    if (groups.length > 0) {
+        soundManager.playSwap();
+        setMovesLeft(prev => prev - 1);
+        setSelectedTileId(null);
+        setBoard(tempBoard);
+        setIsProcessing(true); 
+
+        await new Promise(r => setTimeout(r, 250));
+        
+        await processMatches(tempBoard, 1, id);
+    } else {
+        setBoard(tempBoard); 
+        soundManager.playSwap(); 
+        await new Promise(r => setTimeout(r, 250));
+        setBoard(board); 
     }
   };
 
-  const clearPartialObstacles = (currentBoard: TileData[], statusType: 'rock' | 'ice' | 'steel', count: number): TileData[] => {
-      const targets = currentBoard.filter(t => t.status === statusType);
-      
-      if (targets.length > 0) {
-          if (statusType === 'rock') soundManager.playRockBreak();
-          if (statusType === 'ice') soundManager.playIceBreak();
-          if (statusType === 'steel') soundManager.playRockBreak(); 
-      }
-
-      const shuffled = targets.sort(() => 0.5 - Math.random());
-      const toClear = shuffled.slice(0, count).map(t => t.id);
-      
-      return currentBoard.map(t => {
-          if (toClear.includes(t.id)) {
-               return { ...t, status: 'normal' };
-          }
-          return t;
-      });
-  };
-
   const executeSkill = async (monster: Boss) => {
-      if (skillCharges[monster.id] < monster.skillCost || enemy.currentHp <= 0) return;
-      soundManager.playButton();
-      setShowSkillMenu(false);
-      setIsProcessing(true);
-      setSkillCharges(prev => ({...prev, [monster.id]: 0}));
-      setHoveredSkillInfo(null); // Clear any lingering hover info
+     if (skillCharges[monster.id] < monster.skillCost || enemy.currentHp <= 0) return;
+     soundManager.playButton();
+     setShowSkillMenu(false);
+     setSkillCharges(prev => ({...prev, [monster.id]: 0}));
+     setIsProcessing(true);
 
-      soundManager.playBeam();
+     soundManager.playBeam();
+     let dmg = 500;
+     if (monster.skillType === 'nuke') dmg = 1000;
+     applyDamage(dmg);
+     
+     if (enemy.currentHp - dmg <= 0) {
+        setShowFinishMessage(true);
+        soundManager.playWin();
+        await new Promise(r => setTimeout(r, 2000));
+        setShowFinishMessage(false);
+        
+        await new Promise(r => setTimeout(r, 2000));
+        setIsDefeatedAnim(true);
+        await new Promise(r => setTimeout(r, 1500));
 
-      let dmg = 0;
-      let extraEffect = false;
-
-      switch(monster.skillType) {
-          case 'damage_single':
-              dmg = 500;
-              break;
-          case 'damage_aoe':
-              dmg = 300; 
-              break;
-          case 'nuke':
-              dmg = 1000;
-              break;
-          case 'clear_rocks':
-              setBoard(prev => clearPartialObstacles(prev, 'rock', 5));
-              extraEffect = true;
-              break;
-          case 'clear_ice':
-              setBoard(prev => clearPartialObstacles(prev, 'ice', 5));
-              extraEffect = true;
-              break;
-          case 'clear_steel':
-              setBoard(prev => clearPartialObstacles(prev, 'steel', 3));
-              extraEffect = true;
-              break;
-          case 'convert_type':
-               setBoard(prev => {
-                   const targets = prev.filter(t => t.status === 'normal' && t.monsterId !== monster.id);
-                   const chosen = targets.sort(() => 0.5 - Math.random()).slice(0, 5);
-                   const ids = chosen.map(t => t.id);
-                   return prev.map(t => ids.includes(t.id) ? {...t, monsterId: monster.id, type: monster.type, emoji: monster.emoji, image: monster.image} : t);
-               });
-               extraEffect = true;
-               break;
-      }
-      
-      if (dmg > 0) {
-          applyDamage(dmg);
-          // Check death from skill
-          if (enemy.currentHp - dmg <= 0) {
-              setVictoryAnim(true);
-              // Allow animation to play
-              setTimeout(() => {
-                  setVictoryAnim(false);
-                  if (isFinalBossMode) {
-                        setAppState('victory'); 
-                  } else if (collection.some(m => m.name === enemy.name)) {
-                        advanceLevel();
-                  } else {
-                        setAppState('capture');
-                  }
-                  setIsProcessing(false);
-              }, 2000);
-              return;
-          }
-      }
-      
-      // Removed fixed delays to make it snappy
-      if (extraEffect || monster.skillType === 'convert_type') {
-          await processBoard(board, 0, false); 
-      } else {
-          setIsProcessing(false);
-      }
+        setIsProcessing(false);
+        if (isFinalBossMode) setAppState('victory');
+        else if (collection.some(m => m.name === enemy.name)) advanceLevel();
+        else setAppState('capture');
+     } else {
+        setTimeout(() => setIsProcessing(false), 500);
+     }
   };
 
   const addFloatingText = (x: number, y: number, text: string, color: string = 'white', scale: number = 1) => {
@@ -487,10 +389,8 @@ const App: React.FC = () => {
           const rect = boardRef.current.getBoundingClientRect();
           const startX = rect.left + (gridX + 0.5) * (rect.width / 6);
           const startY = rect.top + (gridY + 0.5) * (rect.height / 6);
-          
           const targetX = window.innerWidth / 2;
           const targetY = window.innerHeight * 0.15; 
-
           const id = Date.now() + Math.random().toString();
           setProjectiles(prev => [...prev, { id, startX, startY, targetX, targetY, color }]);
           setTimeout(() => setProjectiles(prev => prev.filter(p => p.id !== id)), 600);
@@ -499,12 +399,10 @@ const App: React.FC = () => {
 
   const anySkillReady = team.some(m => (skillCharges[m.id] || 0) >= m.skillCost);
 
-  const turnsUsed = Math.max(1, movesAtStart - movesLeft);
-  const captureRate = Math.max(1, 100 - ((turnsUsed - 1) * 5));
-
   return (
     <div className={`h-screen w-screen bg-black flex overflow-hidden font-sans select-none text-slate-100 relative`}>
-      <div className={`absolute inset-0 z-0 transition-opacity duration-1000 ease-in-out ${getLevelBackground(level, enemy.type)}`}></div>
+      {/* Background - Removed Blur from here */}
+      <div className={`absolute inset-0 z-0 transition-all duration-700 ease-in-out ${getLevelBackground(level, enemy.type)}`}></div>
 
       {appState === 'menu' && (
           <MainMenu 
@@ -515,6 +413,8 @@ const App: React.FC = () => {
           />
       )}
 
+      {/* ... (Gallery and TeamSelect remain same, code elided for brevity if not changed, but must include full file in update) ... */}
+      
       {appState === 'gallery' && (
           <div className="absolute inset-0 z-50 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-indigo-900 via-slate-900 to-black p-4 flex flex-col">
               <div className="flex justify-between items-center mb-4">
@@ -529,41 +429,22 @@ const App: React.FC = () => {
                         className="bg-slate-800 p-2 rounded-xl flex flex-col items-center border border-slate-700 active:scale-95 transition-transform"
                       >
                           <div className="w-12 h-12 flex items-center justify-center">
-                            {m.image ? (
-                                <img src={m.image} alt={m.emoji} className="w-full h-full object-contain" />
-                            ) : (
-                                <span className="text-3xl">{m.emoji}</span>
-                            )}
+                            {m.image ? <img src={m.image} className="w-full h-full object-contain" /> : <span className="text-3xl">{m.emoji}</span>}
                           </div>
-                          <div className="text-xs font-bold text-slate-300 truncate w-full text-center">{m.name}</div>
                       </div>
                   ))}
               </div>
-              {/* Gallery Modal */}
               {viewingMonster && (
                   <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4" onClick={() => setViewingMonster(null)}>
-                      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-600 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
+                      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-600 max-w-sm w-full relative">
                           <button onClick={() => setViewingMonster(null)} className="absolute top-2 right-2 p-1 bg-slate-700 rounded-full"><X size={16}/></button>
                           <div className="text-center mb-4">
-                              <div className="w-40 h-40 mx-auto mb-2 animate-bounce flex items-center justify-center">
-                                  {viewingMonster.image ? (
-                                    <img src={viewingMonster.image} alt={viewingMonster.emoji} className="w-full h-full object-contain" />
-                                  ) : (
-                                    <span className="text-8xl">{viewingMonster.emoji}</span>
-                                  )}
+                              <div className="w-40 h-40 mx-auto mb-2 flex items-center justify-center">
+                                  {viewingMonster.image ? <img src={viewingMonster.image} className="w-full h-full object-contain" /> : <span className="text-8xl">{viewingMonster.emoji}</span>}
                               </div>
-                              <h3 className="text-3xl font-black text-white mb-2 leading-none relative z-10">{viewingMonster.name}</h3>
-                              <div className="relative z-0">
-                                <span className="text-xs bg-slate-900 px-3 py-1 rounded-full text-slate-400 border border-slate-700 font-bold uppercase tracking-wider">
-                                    {viewingMonster.type}
-                                </span>
-                              </div>
+                              <h3 className="text-3xl font-black text-white">{viewingMonster.name}</h3>
                           </div>
                           <p className="text-slate-300 italic text-sm mb-4 text-center">"{viewingMonster.description}"</p>
-                          <div className="bg-indigo-900/30 p-3 rounded-xl border border-indigo-500/30">
-                              <h4 className="text-indigo-400 font-bold text-xs uppercase mb-1">Habilidad: {viewingMonster.skillName}</h4>
-                              <p className="text-indigo-100 text-xs">{viewingMonster.skillDescription}</p>
-                          </div>
                       </div>
                   </div>
               )}
@@ -585,88 +466,86 @@ const App: React.FC = () => {
       {appState === 'capture' && (
           <CaptureModal 
              boss={enemy} 
-             chance={captureRate}
+             chance={Math.max(1, 100 - ((Math.max(1, movesAtStart - movesLeft) - 1) * 5))}
              onCaptureEnd={handleCaptureResult}
           />
       )}
       
       {appState === 'captured_info' && (
-          // CLICK ANYWHERE TO CONTINUE
           <div 
              onClick={() => { soundManager.playButton(); advanceLevel(); }}
-             className="absolute inset-0 z-50 bg-indigo-900/95 flex flex-col items-center justify-center p-8 animate-in zoom-in cursor-pointer"
+             className="absolute inset-0 z-50 bg-indigo-950/95 flex flex-col items-center justify-center p-8 animate-in zoom-in cursor-pointer text-center"
           >
-              <div className="w-40 h-40 mb-4 animate-bounce flex items-center justify-center">
-                    {enemy.image && !imgError ? (
-                        <img 
-                            src={enemy.image} 
-                            alt={enemy.emoji} 
-                            className="w-full h-full object-contain" 
-                            onError={() => setImgError(true)}
-                        />
-                    ) : (
-                        <span className="text-9xl">{enemy.emoji}</span>
-                    )}
-              </div>
-              <h2 className="text-4xl font-black text-white mb-2">{enemy.name}</h2>
-              <div className="bg-white/10 px-4 py-1 rounded-full text-indigo-200 mb-4 font-mono text-sm">
-                  TIPO: {enemy.type.toUpperCase()}
-              </div>
-              
-              <p className="text-indigo-200 italic mb-6 text-center max-w-xs text-sm">"{enemy.description}"</p>
-              
-              <div className="bg-slate-900 p-6 rounded-2xl border border-indigo-500 max-w-sm w-full mb-8">
-                  <h3 className="text-yellow-400 font-bold mb-1">HABILIDAD: {enemy.skillName}</h3>
-                  <p className="text-slate-300 text-sm">{enemy.skillDescription}</p>
+              <div className="flex-1 flex flex-col items-center justify-center w-full max-w-lg overflow-y-auto no-scrollbar">
+                  <div className="w-48 h-48 mb-6 animate-bounce flex items-center justify-center filter drop-shadow-2xl">
+                        {enemy.image && !imgError ? <img src={enemy.image} className="w-full h-full object-contain" /> : <span className="text-9xl">{enemy.emoji}</span>}
+                  </div>
+                  <h2 className="text-5xl font-black text-white mb-2 tracking-wide text-shadow">{enemy.name}</h2>
+                  <div className="bg-white/10 px-4 py-1 rounded-full text-sm font-bold uppercase tracking-widest text-indigo-200 mb-6 border border-white/20">
+                      Tipo: {enemy.type}
+                  </div>
+                  
+                  <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700 backdrop-blur w-full mb-4">
+                      <p className="text-slate-200 text-lg italic leading-relaxed mb-4">"{enemy.description}"</p>
+                      <div className="border-t border-slate-700 pt-4">
+                          <span className="text-yellow-400 font-bold uppercase text-xs block mb-1">Habilidad Especial</span>
+                          <span className="text-white font-bold text-xl block mb-1">{enemy.skillName}</span>
+                          <span className="text-slate-400 text-sm">{enemy.skillDescription}</span>
+                      </div>
+                  </div>
               </div>
               
-              <div className="text-3xl font-black text-white animate-pulse mt-8 border-b-4 border-white pb-1">
-                  PULSA PARA CONTINUAR
+              <div className="mt-4 pt-4 w-full border-t border-white/10 animate-pulse">
+                  <span className="text-xl font-bold text-white uppercase tracking-widest">Toca para continuar</span>
               </div>
           </div>
       )}
 
       {appState === 'playing' && (
-          <div className="flex-1 h-full flex flex-col items-center relative min-w-0 justify-center z-10 w-full max-w-md mx-auto">
-             <div className="w-full flex justify-between items-center px-4 pt-4 pb-2 z-20">
-                 <button onClick={handleQuitToMenu} className="bg-red-900/80 p-2 rounded-lg border border-red-700 text-red-200 hover:bg-red-800">
-                     <LogOut size={18} />
-                 </button>
+          <>
+            {/* Game Content Wrapper - REMOVED global blur */}
+            <div className={`flex-1 h-full flex flex-col items-center relative min-w-0 justify-center z-10 w-full max-w-md mx-auto transition-all duration-700`}>
+             
+                {/* SUPERADO OVERLAY */}
+                {stageCleared && (
+                    <div className="absolute inset-x-0 top-1/3 z-50 flex items-center justify-center pointer-events-none">
+                        <div className="bg-yellow-500/90 text-white font-black text-4xl md:text-6xl px-8 py-4 rounded-xl shadow-2xl border-4 border-white transform -rotate-3 animate-bounce drop-shadow-[0_4px_0_rgba(0,0,0,0.5)]">
+                            ¡SUPERADO!
+                        </div>
+                    </div>
+                )}
 
-                 <div className="bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-600 font-bold flex flex-col items-center">
-                     <span className="text-[10px] text-slate-400 uppercase">Turnos</span>
-                     <span className={`text-2xl ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
-                 </div>
-                 
-                 <div className="relative group">
-                    <button 
-                        onClick={() => !isProcessing && enemy.currentHp > 0 && (soundManager.playButton(), setShowSkillMenu(!showSkillMenu))}
-                        className={`bg-indigo-600 p-3 rounded-full border-2 border-indigo-400 shadow-lg shadow-indigo-500/30 active:scale-95 transition-all ${anySkillReady ? 'animate-bounce' : ''} ${enemy.currentHp <= 0 ? 'opacity-50 grayscale' : ''}`}
-                    >
-                        <Zap fill="currentColor" />
+                <div className="w-full flex justify-between items-center px-4 pt-4 pb-2 z-20">
+                    <button onClick={handleQuitToMenu} className="bg-red-900/80 p-2 rounded-lg border border-red-700 text-red-200 hover:bg-red-800">
+                        <LogOut size={18} />
                     </button>
-                    {showSkillMenu && enemy.currentHp > 0 && (
-                        <div className="absolute top-14 right-0 bg-slate-800 border border-slate-600 rounded-xl p-2 w-72 shadow-2xl z-50 flex flex-col gap-2 animate-in zoom-in">
-                            {team.map(m => {
-                                const charge = skillCharges[m.id] || 0;
-                                const ready = charge >= m.skillCost;
-                                return (
-                                    <div key={m.id} className="group/item relative">
+
+                    <div className="bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-600 font-bold flex flex-col items-center">
+                        <span className="text-[10px] text-slate-400 uppercase">Turnos</span>
+                        <span className={`text-2xl ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
+                    </div>
+                    
+                    <div className="relative group">
+                        <button 
+                            onClick={() => !isProcessing && enemy.currentHp > 0 && (soundManager.playButton(), setShowSkillMenu(!showSkillMenu))}
+                            className={`bg-indigo-600 p-3 rounded-full border-2 border-indigo-400 shadow-lg shadow-indigo-500/30 active:scale-95 transition-all ${anySkillReady ? 'animate-bounce' : ''} ${enemy.currentHp <= 0 ? 'opacity-50 grayscale' : ''}`}
+                        >
+                            <Zap fill="currentColor" />
+                        </button>
+                        {showSkillMenu && enemy.currentHp > 0 && (
+                            <div className="absolute top-14 right-0 bg-slate-800 border border-slate-600 rounded-xl p-2 w-72 shadow-2xl z-50 flex flex-col gap-2 animate-in zoom-in">
+                                {team.map(m => {
+                                    const charge = skillCharges[m.id] || 0;
+                                    const ready = charge >= m.skillCost;
+                                    return (
                                         <button 
+                                            key={m.id}
                                             disabled={!ready}
                                             onClick={() => executeSkill(m)}
-                                            onMouseEnter={() => setHoveredSkillInfo({ name: m.skillName, desc: m.skillDescription })}
-                                            onMouseLeave={() => setHoveredSkillInfo(null)}
-                                            onTouchStart={() => setHoveredSkillInfo({ name: m.skillName, desc: m.skillDescription })}
-                                            onTouchEnd={() => setHoveredSkillInfo(null)}
                                             className={`w-full flex items-center gap-3 p-2 rounded-lg text-left transition-all ${ready ? 'bg-indigo-900/50 hover:bg-indigo-800 border border-indigo-500' : 'opacity-50 grayscale'}`}
                                         >
                                             <div className="w-8 h-8 flex items-center justify-center">
-                                                {m.image ? (
-                                                    <img src={m.image} alt={m.emoji} className="w-full h-full object-contain" />
-                                                ) : (
-                                                    <span className="text-xl">{m.emoji}</span>
-                                                )}
+                                                {m.image ? <img src={m.image} className="w-full h-full object-contain" /> : <span className="text-xl">{m.emoji}</span>}
                                             </div>
                                             <div className="flex-1">
                                                 <div className="text-xs font-bold text-white">{m.skillName}</div>
@@ -675,80 +554,99 @@ const App: React.FC = () => {
                                                 </div>
                                             </div>
                                         </button>
-                                    </div>
-                                )
-                            })}
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="w-full max-w-md px-4 mb-2 z-10 relative mx-auto" ref={bossRef}>
+                    <BossCard boss={enemy} shake={bossShake} damageTaken={lastDamage} isDefeated={isDefeatedAnim} />
+                    
+                    {/* MODIFIED COMBO UI - Moved inside relative container, pinned to RIGHT */}
+                    {comboCount > 0 && (
+                        <div className="absolute top-8 right-4 z-50 flex flex-col items-end animate-in zoom-in duration-300 pointer-events-none">
+                            <span className="text-yellow-400 font-black text-sm italic tracking-widest drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] whitespace-nowrap" style={{textShadow: '0 0 10px rgba(250,204,21,0.5)'}}>
+                                {(showFinishMessage || enemy.currentHp <= 0) ? "COMBO EXTRA" : "COMBO"}
+                            </span>
+                            <span className="text-6xl font-black text-white leading-none drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]" 
+                                style={{
+                                    WebkitTextStroke: '2px #ca8a04',
+                                    textShadow: '0 0 20px rgba(250,204,21,0.6)'
+                                }}>
+                                {comboCount}
+                            </span>
                         </div>
                     )}
-                 </div>
-             </div>
+                </div>
 
-             <div className="w-full px-4 mb-2 z-10" ref={bossRef}>
-                <BossCard boss={enemy} shake={bossShake} damageTaken={lastDamage} />
-             </div>
-
-             <div className="flex-1 w-full relative flex flex-col justify-center items-center z-10" ref={boardRef}>
-                <Board 
-                    board={board} 
-                    selectedTileId={selectedTileId} 
-                    onSwap={handleSwap} 
-                    isProcessing={isProcessing} 
-                    floatingTexts={floatingTexts} 
-                    shake={boardShake}
-                />
-
-                {/* Combo UI - Moved Higher */}
-                {comboCount > 1 && !victoryAnim && (
-                    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
-                        <div className="text-5xl font-black text-yellow-400 drop-shadow-[0_4px_0_rgba(0,0,0,1)] animate-bounce text-center">
-                            COMBO<br/>x{comboCount}
+                {/* BOARD CONTAINER */}
+                <div className="flex-1 w-full relative flex flex-col justify-center items-center z-10" ref={boardRef}>
+                    
+                    {/* "¡YA ESTÁ!" OVERLAY - MOVED INSIDE BOARD CONTAINER & UNBLURRED */}
+                    {showFinishMessage && (
+                        <div className="absolute inset-0 z-[100] flex items-center justify-center pointer-events-none">
+                            <div className="relative transform scale-125 animate-gentle-bounce">
+                                <h1 
+                                    className="text-6xl md:text-8xl font-black tracking-tight text-center"
+                                    style={{
+                                        color: 'transparent',
+                                        backgroundImage: 'linear-gradient(to bottom, #fef08a, #84cc16, #eab308)', 
+                                        WebkitBackgroundClip: 'text',
+                                        backgroundClip: 'text',
+                                        WebkitTextStroke: '4px white',
+                                        filter: 'drop-shadow(0px 8px 4px rgba(0,0,0,0.6))',
+                                    }}
+                                >
+                                    ¡YA ESTÁ!
+                                </h1>
+                                <h1 
+                                    className="text-6xl md:text-8xl font-black tracking-tight text-center absolute inset-0 z-[-1]"
+                                    style={{
+                                        WebkitTextStroke: '8px rgba(0,0,0,0.5)',
+                                        color: 'transparent',
+                                    }}
+                                >
+                                    ¡YA ESTÁ!
+                                </h1>
+                            </div>
                         </div>
-                    </div>
-                )}
-                
-                {/* Victory Animation */}
-                {victoryAnim && (
-                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px]">
-                        <div className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-orange-600 drop-shadow-[0_10px_0_rgba(0,0,0,0.5)] animate-in zoom-in duration-300">
-                            ¡VENCIDO!
-                        </div>
-                    </div>
-                )}
+                    )}
 
-                {/* Skill Hover/Hold Info Overlay */}
-                {hoveredSkillInfo && (
-                    <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-                        <div className="bg-black/90 backdrop-blur-xl p-8 rounded-3xl border-2 border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.5)] animate-in fade-in zoom-in text-center max-w-[90%] transform scale-110">
-                            <h3 className="text-3xl font-black text-yellow-400 mb-4 uppercase drop-shadow-lg">{hoveredSkillInfo.name}</h3>
-                            <p className="text-white text-xl font-medium leading-relaxed">{hoveredSkillInfo.desc}</p>
-                        </div>
+                    {/* BOARD COMPONENT - BLURRED WHEN MESSAGE IS SHOWN */}
+                    <div className={`transition-all duration-700 w-full flex justify-center ${showFinishMessage ? 'blur-md' : ''}`}>
+                        <Board 
+                            board={board} 
+                            selectedTileId={selectedTileId} 
+                            onMove={handleMove} 
+                            isProcessing={isProcessing} 
+                            floatingTexts={floatingTexts} 
+                            shake={boardShake}
+                        />
                     </div>
-                )}
-             </div>
-          </div>
+                </div>
+            </div>
+
+            <style>{`
+                @keyframes gentle-bounce {
+                    0%, 100% { transform: scale(1.25); }
+                    50% { transform: scale(1.3); }
+                }
+                .animate-gentle-bounce {
+                    animation: gentle-bounce 2s infinite ease-in-out;
+                }
+            `}</style>
+          </>
       )}
 
-      {/* Quit Confirmation Modal */}
       {showQuitConfirmation && (
         <div className="absolute inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
-            <div className="bg-slate-800 p-6 rounded-2xl border border-red-500/50 max-w-sm w-full text-center shadow-2xl animate-in zoom-in-95">
-                <h3 className="text-2xl font-black text-white mb-2">¿Abandonar?</h3>
-                <p className="text-slate-300 mb-6">
-                    Conservarás tus Monstemojis capturados, pero tendrás que empezar de nuevo desde la Fase 1.
-                </p>
+            <div className="bg-slate-800 p-6 rounded-2xl border border-red-500/50 max-w-sm w-full text-center">
+                <h3 className="text-2xl font-black text-white mb-4">¿Abandonar?</h3>
                 <div className="flex gap-4 justify-center">
-                    <button 
-                        onClick={() => setShowQuitConfirmation(false)}
-                        className="bg-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-600 transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                    <button 
-                        onClick={confirmQuit}
-                        className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20"
-                    >
-                        Salir
-                    </button>
+                    <button onClick={() => setShowQuitConfirmation(false)} className="bg-slate-700 text-white px-6 py-3 rounded-xl font-bold">Cancelar</button>
+                    <button onClick={confirmQuit} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold">Salir</button>
                 </div>
             </div>
         </div>
@@ -757,8 +655,7 @@ const App: React.FC = () => {
       {appState === 'victory' && (
           <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center text-center p-8">
               <h1 className="text-6xl mb-4">🏆</h1>
-              <h2 className="text-4xl font-black text-yellow-400 mb-4">{isFinalBossMode ? "¡MAESTRO SUPREMO!" : "¡CAMPEÓN!"}</h2>
-              <p className="text-slate-300 mb-8">{isFinalBossMode ? "Has derrotado al creador." : "Has superado las 30 fases."}</p>
+              <h2 className="text-4xl font-black text-yellow-400 mb-4">¡VICTORIA!</h2>
               <button onClick={() => { soundManager.playButton(); setAppState('menu'); }} className="bg-white text-black px-8 py-4 rounded-xl font-bold">Volver al Menú</button>
           </div>
       )}
@@ -767,7 +664,6 @@ const App: React.FC = () => {
           <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center text-center p-8">
               <Skull size={64} className="text-red-600 mb-4" />
               <h2 className="text-4xl font-black text-white mb-2">GAME OVER</h2>
-              <p className="text-slate-400 mb-8">Te quedaste sin turnos en la fase {level}.</p>
               <button onClick={() => { soundManager.playButton(); setAppState('menu'); }} className="bg-slate-700 text-white px-8 py-4 rounded-xl font-bold flex gap-2"><RotateCcw /> Volver al Menú</button>
           </div>
       )}

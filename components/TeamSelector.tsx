@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Boss } from '../types';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 import { getLevelBackground, TYPE_PASTELS } from '../constants';
 
@@ -14,23 +14,44 @@ interface TeamSelectorProps {
     movesLeft: number; 
 }
 
+const ITEMS_PER_PAGE = 12; // 3 rows * 4 columns
+
 const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, onUpdateTeam, onStart, nextLevel, nextEnemy, movesLeft }) => {
     const [hoveredMonster, setHoveredMonster] = useState<Boss | null>(null);
     const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
+    const [currentPage, setCurrentPage] = useState(0);
     
     // Custom Touch Drag State
     const [dragMonster, setDragMonster] = useState<Boss | null>(null);
     const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
     
-    // Hold timer for mobile drag
-    const holdTimerRef = useRef<number | null>(null);
-    const touchStartPosRef = useRef({ x: 0, y: 0 });
-
     const isTeamValid = currentTeam.length === 4;
 
     const handleImageError = (id: string) => {
         setImgErrors(prev => ({ ...prev, [id]: true }));
+    };
+
+    // Sort Collection by Type Alphabetically
+    const sortedCollection = useMemo(() => {
+        return [...collection].sort((a, b) => a.type.localeCompare(b.type));
+    }, [collection]);
+
+    const totalPages = Math.ceil(sortedCollection.length / ITEMS_PER_PAGE);
+    const currentMonsters = sortedCollection.slice(currentPage * ITEMS_PER_PAGE, (currentPage + 1) * ITEMS_PER_PAGE);
+
+    // --- NAVIGATION ---
+    const nextPage = () => {
+        if (currentPage < totalPages - 1) {
+            setCurrentPage(p => p + 1);
+            soundManager.playButton();
+        }
+    };
+
+    const prevPage = () => {
+        if (currentPage > 0) {
+            setCurrentPage(p => p - 1);
+            soundManager.playButton();
+        }
     };
 
     // --- DESKTOP DND HANDLERS ---
@@ -51,45 +72,23 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
         e.preventDefault();
     };
 
-    // --- MOBILE TOUCH HANDLERS (HOLD TO DRAG) ---
+    // --- MOBILE TOUCH HANDLERS (IMMEDIATE DRAG) ---
     const handleTouchStart = (e: React.TouchEvent, monster: Boss) => {
         const touch = e.touches[0];
-        touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
-        
-        // Start Timer: If held for 300ms without moving, start drag
-        holdTimerRef.current = window.setTimeout(() => {
-            setDragMonster(monster);
-            setDragPos({ x: touch.clientX, y: touch.clientY });
-            soundManager.playButton(); // Feedback
-            // Prevent native scroll loop via state if possible, but touch-action CSS handles usually
-        }, 300);
+        setDragMonster(monster);
+        setDragPos({ x: touch.clientX, y: touch.clientY });
+        soundManager.playButton(); 
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
-        const touch = e.touches[0];
-        
-        if (!dragMonster) {
-            // Check if moved significantly to cancel hold
-            const dist = Math.hypot(touch.clientX - touchStartPosRef.current.x, touch.clientY - touchStartPosRef.current.y);
-            if (dist > 10) {
-                if (holdTimerRef.current) {
-                    clearTimeout(holdTimerRef.current);
-                    holdTimerRef.current = null;
-                }
-            }
-        } else {
-            // We are dragging, update ghost
-            if (e.cancelable) e.preventDefault(); // Stop scroll
+        if (dragMonster) {
+            if (e.cancelable) e.preventDefault(); // Prevent scrolling while dragging
+            const touch = e.touches[0];
             setDragPos({ x: touch.clientX, y: touch.clientY });
         }
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
-        if (holdTimerRef.current) {
-            clearTimeout(holdTimerRef.current);
-            holdTimerRef.current = null;
-        }
-
         if (dragMonster) {
             const touch = e.changedTouches[0];
             const target = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -134,13 +133,13 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
             {/* Lighter overlay */}
             <div className="absolute inset-0 bg-slate-900/40 pointer-events-none"></div>
 
-            <div className="relative z-10 w-full flex flex-col items-center flex-1 overflow-hidden">
+            <div className="relative z-10 w-full flex flex-col items-center flex-1 overflow-hidden max-w-xl mx-auto">
                 <h1 className="text-3xl font-black text-white italic mb-2 uppercase tracking-widest drop-shadow-md">
                     Fase {nextLevel}
                 </h1>
                 
                 {/* VS Panel */}
-                <div className="w-full max-w-md bg-slate-800/90 backdrop-blur-md rounded-2xl p-4 border border-slate-600 flex items-center gap-4 mb-2 shadow-xl">
+                <div className="w-full bg-slate-800/90 backdrop-blur-md rounded-2xl p-4 border border-slate-600 flex items-center gap-4 mb-2 shadow-xl">
                     <div className="flex-1 text-right">
                         <span className="text-xs text-red-400 font-bold uppercase block">Enemigo</span>
                         <span className="text-xl font-bold text-white">{nextEnemy.name}</span>
@@ -171,9 +170,9 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 </div>
 
                 {/* Info Box */}
-                <div className="h-12 w-full max-w-md flex items-center justify-center mb-2">
+                <div className="h-10 w-full flex items-center justify-center mb-1">
                     {hoveredMonster && (
-                        <div className="bg-slate-800/90 px-4 py-2 rounded-xl border border-yellow-500/50 text-center animate-in fade-in zoom-in duration-200 shadow-xl backdrop-blur-sm">
+                        <div className="bg-slate-800/90 px-4 py-2 rounded-xl border border-yellow-500/50 text-center animate-in fade-in zoom-in duration-200 shadow-xl backdrop-blur-sm z-20">
                             <span className="text-yellow-400 font-bold text-xs block">{hoveredMonster.skillName}</span>
                             <span className="text-slate-300 text-[10px]">{hoveredMonster.skillDescription}</span>
                         </div>
@@ -181,20 +180,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 </div>
 
                 {/* Active Team Slots */}
-                <div className="w-full max-w-md mb-4">
-                    <div className="flex justify-between items-end mb-2">
-                        <span className="text-sm font-bold text-white uppercase drop-shadow">Tu Equipo</span>
-                        <button 
-                            onClick={() => { soundManager.playButton(); onStart(); }}
-                            disabled={!isTeamValid}
-                            className={`
-                                px-6 py-2 rounded-full font-bold flex items-center gap-2 transition-all shadow-xl
-                                ${isTeamValid ? 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white transform hover:scale-105' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}
-                            `}
-                        >
-                            ¡A Luchar! <ChevronRight size={18} />
-                        </button>
-                    </div>
+                <div className="w-full mb-4">
+                    <span className="text-sm font-bold text-white uppercase drop-shadow block mb-2 text-center">Tu Equipo</span>
                     <div className="flex gap-2 h-24">
                         {[0, 1, 2, 3].map(idx => {
                             const member = currentTeam[idx];
@@ -234,66 +221,101 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                     </div>
                 </div>
 
-                {/* Collection */}
-                <div className="flex-1 w-full max-w-md bg-white/10 backdrop-blur-xl rounded-t-3xl border-t border-white/20 p-4 overflow-hidden flex flex-col shadow-2xl">
-                    <span className="text-xs text-white font-bold uppercase mb-2 block text-center tracking-widest text-shadow">MONSTEMOJIS DISPONIBLES</span>
-                    <div 
-                        ref={scrollContainerRef}
-                        className="flex-1 overflow-y-auto grid grid-cols-4 gap-2 content-start pb-20 no-scrollbar touch-pan-y"
+                {/* Collection - Grid with Pages */}
+                <div className="flex-1 w-full bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 relative flex flex-col shadow-2xl mb-4 overflow-hidden">
+                    <div className="flex items-center justify-center py-2 bg-black/20">
+                        <span className="text-xs text-white font-bold uppercase tracking-widest text-shadow">MONSTEMOJIS DISPONIBLES</span>
+                        <span className="text-[10px] text-slate-300 ml-2">({currentPage + 1}/{totalPages || 1})</span>
+                    </div>
+                    
+                    {/* Navigation Arrows */}
+                    <button 
+                        onClick={prevPage}
+                        disabled={currentPage === 0}
+                        className={`absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full border border-white/20 transition-all ${currentPage === 0 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/50 hover:bg-black/80 active:scale-95 text-white'}`}
                     >
-                        {collection.map(monster => {
-                            const isSelected = currentTeam.find(m => m.id === monster.id);
-                            const bgColor = TYPE_PASTELS[monster.type] || 'bg-slate-800 border-slate-700';
-                            
-                            return (
-                                <div
-                                    key={monster.id}
-                                    draggable={true}
-                                    onDragStart={(e) => handleDragStart(e, monster)}
-                                    
-                                    // Touch handlers
-                                    onTouchStart={(e) => handleTouchStart(e, monster)}
-                                    onTouchMove={handleTouchMove}
-                                    onTouchEnd={handleTouchEnd}
-                                    
-                                    onMouseEnter={() => setHoveredMonster(monster)}
-                                    onMouseLeave={() => setHoveredMonster(null)}
-                                    className={`
-                                        aspect-square rounded-xl flex flex-col items-center justify-center border-2 relative cursor-grab active:cursor-grabbing transition-transform select-none
-                                        ${bgColor}
-                                        ${isSelected 
-                                            ? 'opacity-40 grayscale scale-95' 
-                                            : 'hover:scale-105 shadow-md'
-                                        }
-                                    `}
-                                >
-                                    <div className="w-10 h-10 mb-1 flex items-center justify-center filter drop-shadow-sm">
-                                        {monster.image && !imgErrors[monster.id] ? (
-                                            <img 
-                                                src={monster.image} 
-                                                alt={monster.emoji} 
-                                                className="w-full h-full object-contain" 
-                                                onError={() => handleImageError(monster.id)}
-                                            />
-                                        ) : (
-                                            <span className="text-3xl">{monster.emoji}</span>
-                                        )}
+                        <ChevronLeft size={24} />
+                    </button>
+                    <button 
+                        onClick={nextPage}
+                        disabled={currentPage >= totalPages - 1}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full border border-white/20 transition-all ${currentPage >= totalPages - 1 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/50 hover:bg-black/80 active:scale-95 text-white'}`}
+                    >
+                        <ChevronRight size={24} />
+                    </button>
+
+                    {/* GRID DISPLAY */}
+                    <div className="flex-1 p-4 flex items-center justify-center">
+                        <div className="grid grid-cols-4 grid-rows-3 gap-2 w-full h-full place-items-center">
+                            {currentMonsters.map(monster => {
+                                const isSelected = currentTeam.find(m => m.id === monster.id);
+                                const bgColor = TYPE_PASTELS[monster.type] || 'bg-slate-800 border-slate-700';
+                                
+                                return (
+                                    <div
+                                        key={monster.id}
+                                        draggable={true}
+                                        onDragStart={(e) => handleDragStart(e, monster)}
+                                        
+                                        // Touch handlers (Immediate Drag)
+                                        onTouchStart={(e) => handleTouchStart(e, monster)}
+                                        onTouchMove={handleTouchMove}
+                                        onTouchEnd={handleTouchEnd}
+                                        
+                                        onMouseEnter={() => setHoveredMonster(monster)}
+                                        onMouseLeave={() => setHoveredMonster(null)}
+                                        className={`
+                                            w-full h-full max-w-[5rem] max-h-[5rem] rounded-xl flex flex-col items-center justify-center border-2 relative cursor-grab active:cursor-grabbing transition-transform select-none
+                                            ${bgColor}
+                                            ${isSelected 
+                                                ? 'opacity-40 grayscale scale-95' 
+                                                : 'hover:scale-105 shadow-md'
+                                            }
+                                        `}
+                                    >
+                                        <div className="w-8 h-8 md:w-10 md:h-10 mb-0.5 flex items-center justify-center filter drop-shadow-sm pointer-events-none">
+                                            {monster.image && !imgErrors[monster.id] ? (
+                                                <img 
+                                                    src={monster.image} 
+                                                    alt={monster.emoji} 
+                                                    className="w-full h-full object-contain" 
+                                                    onError={() => handleImageError(monster.id)}
+                                                />
+                                            ) : (
+                                                <span className="text-2xl md:text-3xl">{monster.emoji}</span>
+                                            )}
+                                        </div>
+                                        <div className="text-[8px] font-bold text-slate-800 truncate w-full text-center bg-white/50 rounded px-1 pointer-events-none mx-1">{monster.name}</div>
+                                        <div className="absolute top-0.5 right-0.5 px-1 rounded-sm bg-black/40 flex items-center justify-center text-[6px] text-white pointer-events-none">
+                                            {monster.type.substring(0, 3)}
+                                        </div>
                                     </div>
-                                    <div className="text-[9px] font-bold text-slate-800 truncate w-full text-center bg-white/50 rounded px-1">{monster.name}</div>
-                                    <div className="absolute top-1 right-1 px-1 rounded-sm bg-black/40 flex items-center justify-center text-[7px] text-white">
-                                        {monster.type}
-                                    </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
+
+                {/* Fight Button - Bottom, Big, Centered */}
+                <button 
+                    onClick={() => { soundManager.playButton(); onStart(); }}
+                    disabled={!isTeamValid}
+                    className={`
+                        w-full max-w-sm py-4 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-[0_0_20px_rgba(0,0,0,0.5)] mb-2 border-2 border-white/20
+                        ${isTeamValid 
+                            ? 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white transform hover:scale-105 hover:shadow-[0_0_30px_rgba(34,197,94,0.6)]' 
+                            : 'bg-slate-800 text-slate-500 cursor-not-allowed grayscale'
+                        }
+                    `}
+                >
+                    ¡A LUCHAR! <ChevronRight size={28} strokeWidth={3} />
+                </button>
             </div>
 
             {/* Mobile Drag Ghost Element */}
             {dragMonster && (
                 <div 
-                    className="fixed w-24 h-24 rounded-full bg-indigo-600/90 backdrop-blur border-4 border-white z-[100] flex items-center justify-center pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-bounce"
+                    className="fixed w-24 h-24 rounded-full bg-indigo-600/90 backdrop-blur border-4 border-white z-[100] flex items-center justify-center pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-bounce shadow-2xl"
                     style={{ left: dragPos.x, top: dragPos.y }}
                 >
                      {dragMonster.image && !imgErrors[dragMonster.id] ? (
@@ -305,13 +327,6 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
             )}
 
             <style>{`
-                .no-scrollbar::-webkit-scrollbar {
-                    display: none;
-                }
-                .no-scrollbar {
-                    -ms-overflow-style: none;
-                    scrollbar-width: none;
-                }
                 .text-shadow {
                     text-shadow: 0 2px 4px rgba(0,0,0,0.5);
                 }

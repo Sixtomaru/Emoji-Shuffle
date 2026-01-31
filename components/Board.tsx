@@ -5,25 +5,29 @@ import Tile from './Tile';
 interface BoardProps {
   board: TileData[];
   selectedTileId: string | null;
-  onSwap: (id1: string, id2: string) => void;
+  onMove: (id: string, x: number, y: number) => void;
   isProcessing: boolean;
   floatingTexts: FloatingText[];
   shake?: boolean;
 }
 
-const Board: React.FC<BoardProps> = ({ board, selectedTileId, onSwap, isProcessing, floatingTexts, shake }) => {
+const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessing, floatingTexts, shake }) => {
   // Drag State
   const [draggingTileId, setDraggingTileId] = useState<string | null>(null);
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 }); // To detect clicks vs drags
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 }); 
   const boardRef = useRef<HTMLDivElement>(null);
 
   // Pointer Events for Dragging
   const handlePointerDown = (e: React.PointerEvent, id: string) => {
     if (isProcessing) return;
     
-    // Capture pointer
-    (e.target as Element).setPointerCapture(e.pointerId);
+    // CRITICAL: Prevent native image dragging or text selection
+    e.preventDefault(); 
+    
+    // Capture pointer to track movement even outside the tile
+    const target = e.target as Element;
+    target.setPointerCapture(e.pointerId);
     
     setDraggingTileId(id);
     setStartPos({ x: e.clientX, y: e.clientY });
@@ -32,37 +36,42 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onSwap, isProcessi
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!draggingTileId) return;
+    e.preventDefault();
     setDragPos({ x: e.clientX, y: e.clientY });
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
     if (!draggingTileId) return;
-    (e.target as Element).releasePointerCapture(e.pointerId);
+    e.preventDefault();
+
+    const target = e.target as Element;
+    try {
+        if (target.hasPointerCapture(e.pointerId)) {
+            target.releasePointerCapture(e.pointerId);
+        }
+    } catch (err) {
+        // Ignore capture errors
+    }
 
     const distance = Math.hypot(e.clientX - startPos.x, e.clientY - startPos.y);
     
     if (distance < 10) {
-      // Treat as Click/Select (Self-swap handled by App)
-      onSwap(draggingTileId, draggingTileId); 
+      // Click/Tap Case: Toggle selection
+      const t = board.find(t => t.id === draggingTileId);
+      if (t) onMove(draggingTileId, t.x, t.y); 
     } else {
-      // Calculate Drop Target
+      // Drag Case: Calculate Drop Target
       if (boardRef.current) {
         const rect = boardRef.current.getBoundingClientRect();
-        // Relative coordinates inside board
         const relX = e.clientX - rect.left;
         const relY = e.clientY - rect.top;
         
-        // Convert to Grid Coords
         const gridX = Math.floor((relX / rect.width) * GRID_WIDTH);
         const gridY = Math.floor((relY / rect.height) * GRID_HEIGHT);
 
-        // Check bounds
+        // Check if inside bounds
         if (gridX >= 0 && gridX < GRID_WIDTH && gridY >= 0 && gridY < GRID_HEIGHT) {
-            // Find target tile at this coordinate
-            const targetTile = board.find(t => t.x === gridX && t.y === gridY);
-            if (targetTile) {
-                onSwap(draggingTileId, targetTile.id);
-            }
+            onMove(draggingTileId, gridX, gridY);
         }
       }
     }
@@ -70,7 +79,6 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onSwap, isProcessi
     setDraggingTileId(null);
   };
 
-  // Helper to render background grid
   const renderGridBackground = () => {
     const cells = [];
     for (let i = 0; i < GRID_WIDTH * GRID_HEIGHT; i++) {
@@ -91,13 +99,14 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onSwap, isProcessi
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
+      onContextMenu={(e) => e.preventDefault()}
     >
       {/* Grid Background */}
       <div className="grid grid-cols-6 grid-rows-6 gap-0 w-full h-full absolute inset-0 p-2 z-0 pointer-events-none">
         {renderGridBackground()}
       </div>
 
-      {/* Tiles Layer */}
+      {/* Tiles Layer - Now managed by Framer Motion Physics in Tile.tsx */}
       <div className="relative w-full h-full z-10">
         {board.map((tile) => (
           <Tile
@@ -110,7 +119,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onSwap, isProcessi
         ))}
       </div>
 
-      {/* Dragging Ghost - SHOWS LARGE EMOJI ONLY */}
+      {/* Dragging Ghost (Visual Feedback for Dragging) */}
       {draggingTile && (
           <div 
              className="fixed w-24 h-24 z-50 pointer-events-none"
@@ -121,7 +130,11 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onSwap, isProcessi
              }}
           >
               <div className="w-full h-full flex items-center justify-center text-7xl drop-shadow-2xl scale-125">
-                  {draggingTile.emoji}
+                  {draggingTile.image ? (
+                     <img src={draggingTile.image} alt="ghost" className="w-full h-full object-contain" />
+                  ) : (
+                     draggingTile.emoji
+                  )}
               </div>
           </div>
       )}
@@ -153,7 +166,6 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onSwap, isProcessi
         .animate-float-text {
             animation: float-text 1s ease-out forwards;
         }
-        /* Softer shake */
         @keyframes shake-soft {
             0%, 100% { transform: translateX(0); }
             25% { transform: translateX(-3px) rotate(-1deg); }
