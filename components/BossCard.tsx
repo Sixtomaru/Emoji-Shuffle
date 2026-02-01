@@ -26,7 +26,7 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
       <div className={`relative transition-transform duration-100 ${shake ? 'animate-shake-violent' : ''}`}>
         <div className={`w-32 h-32 md:w-40 md:h-40 flex items-center justify-center filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)] 
             ${!shake && !isDefeated ? 'animate-float-boss' : ''} 
-            ${isDefeated ? 'animate-defeat-spin' : ''}
+            ${isDefeated ? 'animate-defeat-crumble' : ''}
         `}>
             {boss.image && !imgError ? (
                 <img 
@@ -40,11 +40,16 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
             )}
         </div>
         
-        {/* Smoke Effect triggers when defeated */}
+        {/* Smoke Effect triggers when defeated - SIDEWAYS DUST */}
         {isDefeated && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                 <div className="w-40 h-40 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.8)_0%,rgba(255,255,255,0)_70%)] animate-poof opacity-0" style={{ animationDelay: '0.8s' }}></div>
-            </div>
+            <>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                     <div className="w-20 h-20 bg-white/50 rounded-full blur-xl animate-dust-left"></div>
+                </div>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                     <div className="w-20 h-20 bg-white/50 rounded-full blur-xl animate-dust-right"></div>
+                </div>
+            </>
         )}
         
         {damageTaken && (
@@ -89,20 +94,35 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
          .animate-shake-violent {
             animation: shake-violent 0.4s ease-in-out;
          }
-         @keyframes defeat-spin {
+         
+         @keyframes defeat-crumble {
             0% { transform: scale(1) rotate(0deg); opacity: 1; }
-            20% { transform: scale(1.1) rotate(-10deg); opacity: 1; }
-            100% { transform: scale(0) rotate(720deg); opacity: 0; }
+            20% { transform: scale(0.9) rotate(-10deg) skewX(5deg); opacity: 0.9; }
+            40% { transform: scale(0.8) rotate(10deg) skewX(-5deg); opacity: 0.8; }
+            60% { transform: scale(0.6) rotate(-10deg) skewX(5deg); opacity: 0.6; }
+            80% { transform: scale(0.4) rotate(5deg); opacity: 0.4; }
+            100% { transform: scale(0) rotate(0deg); opacity: 0; }
          }
-         .animate-defeat-spin {
-            animation: defeat-spin 1s ease-in forwards;
+         .animate-defeat-crumble {
+            animation: defeat-crumble 0.8s ease-in-out forwards;
          }
-         @keyframes poof {
-            0% { transform: scale(0.5); opacity: 0.8; }
-            100% { transform: scale(1.5); opacity: 0; }
+
+         @keyframes dust-left {
+            0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+            50% { transform: translate(-50px, 10px) scale(1.5); opacity: 0.8; }
+            100% { transform: translate(-80px, 20px) scale(2); opacity: 0; }
          }
-         .animate-poof {
-            animation: poof 0.5s ease-out forwards;
+         .animate-dust-left {
+            animation: dust-left 0.8s ease-out 0.6s forwards;
+         }
+         
+         @keyframes dust-right {
+            0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+            50% { transform: translate(50px, 10px) scale(1.5); opacity: 0.8; }
+            100% { transform: translate(80px, 20px) scale(2); opacity: 0; }
+         }
+         .animate-dust-right {
+            animation: dust-right 0.8s ease-out 0.6s forwards;
          }
       `}</style>
     </div>

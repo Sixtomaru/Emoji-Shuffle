@@ -96,7 +96,7 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                          <div className={`
                             w-48 h-48 transition-all duration-500 filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] flex items-center justify-center 
                             ${phase === 'idle' ? 'animate-bounce' : ''}
-                            ${phase === 'scanning' ? 'animate-pulse brightness-150' : ''}
+                            ${phase === 'scanning' ? 'animate-scan-tremble' : ''}
                             ${phase === 'absorbing' ? 'animate-struggle' : ''}
                          `}>
                              {boss.image && !imgError ? (
@@ -124,9 +124,9 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                     )}
                 </div>
 
-                {/* 2. THE BEAM (Connecting Device to Boss) - ELECTRIC EFFECT */}
-                {(phase === 'scanning' || phase === 'absorbing') && (
-                    <div className="absolute bottom-40 left-1/2 transform -translate-x-1/2 w-16 md:w-32 h-[60vh] z-20 origin-bottom pointer-events-none">
+                {/* 2. THE BEAM (Connecting Device to Boss) - ELECTRIC EFFECT - INFINITE HEIGHT */}
+                {(phase === 'scanning' || phase === 'absorbing' || (phase === 'result' && !caught)) && (
+                    <div className="absolute bottom-40 left-1/2 transform -translate-x-1/2 w-16 md:w-32 h-[150vh] z-20 origin-bottom pointer-events-none">
                         {/* Core Beam */}
                         <div className="w-full h-full bg-gradient-to-t from-indigo-400 via-cyan-300 to-transparent opacity-60 animate-beam-pulse blur-xl"></div>
                         
@@ -167,7 +167,6 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                             w-64 h-40 bg-red-600 rounded-t-3xl rounded-b-xl border-4 border-red-800 shadow-[0_20px_50px_rgba(0,0,0,0.6)] 
                             flex flex-col items-center justify-start pt-4 relative overflow-hidden transition-transform
                             ${phase === 'idle' ? 'cursor-pointer hover:scale-105 active:scale-95' : ''}
-                            ${phase === 'scanning' ? 'animate-shake-device' : ''}
                         `}
                     >
                         {/* Glass Reflection */}
@@ -225,8 +224,8 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
 
             <style>{`
                 @keyframes beam-pulse {
-                    0%, 100% { opacity: 0.8; height: 60vh; }
-                    50% { opacity: 0.6; height: 62vh; }
+                    0%, 100% { opacity: 0.8; height: 150vh; }
+                    50% { opacity: 0.6; height: 155vh; }
                 }
                 .animate-beam-pulse {
                     animation: beam-pulse 0.2s infinite;
@@ -273,6 +272,16 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                 }
                 .animate-shake-device {
                     animation: shake-device 0.1s linear infinite;
+                }
+
+                @keyframes scan-tremble {
+                    0%, 100% { opacity: 1; transform: translateX(0); }
+                    25% { opacity: 0.6; transform: translateX(-2px); }
+                    50% { opacity: 1; transform: translateX(0); }
+                    75% { opacity: 0.6; transform: translateX(2px); }
+                }
+                .animate-scan-tremble {
+                    animation: scan-tremble 0.1s linear infinite;
                 }
 
                 @keyframes struggle {

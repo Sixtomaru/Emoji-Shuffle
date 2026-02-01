@@ -210,10 +210,12 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                     data-slot-index={idx} // Needed for touch drop detection
                                     onDragOver={handleDragOver}
                                     onDrop={(e) => handleDrop(e, idx)}
-                                    className="flex-1 bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative overflow-hidden group transition-all hover:border-indigo-400 shadow-inner"
+                                    // Removed overflow-hidden to allow type icon to overlap border
+                                    className="flex-1 bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner"
                                 >
                                     {member ? (
-                                        <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900/40">
+                                        <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900/40 rounded-xl">
+                                            {/* Reverted Size to w-10 h-10 */}
                                             <div className="w-10 h-10 mb-1 flex items-center justify-center filter drop-shadow-md">
                                                 {member.image && !imgErrors[member.id] ? (
                                                     <img 
@@ -227,7 +229,9 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                                 )}
                                             </div>
                                             <div className="text-[10px] font-bold text-indigo-200 truncate w-full text-center px-1">{member.name}</div>
-                                            <div className="absolute top-1 right-1 flex items-center justify-center text-xs pointer-events-none filter drop-shadow-md">
+                                            
+                                            {/* Enlarged Type Icon */}
+                                            <div className="absolute -top-1 -right-1 flex items-center justify-center text-lg pointer-events-none filter drop-shadow-md">
                                                 {TYPE_ICONS[member.type]}
                                             </div>
                                         </div>
@@ -247,24 +251,24 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                         <span className="text-[10px] text-slate-300 ml-2">({currentPage + 1}/{totalPages || 1})</span>
                     </div>
                     
-                    {/* Navigation Arrows */}
+                    {/* Navigation Arrows - Vertical Rectangles */}
                     <button 
                         onClick={prevPage}
                         disabled={currentPage === 0}
-                        className={`absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full border border-white/20 transition-all ${currentPage === 0 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/50 hover:bg-black/80 active:scale-95 text-white'}`}
+                        className={`absolute left-0 top-10 bottom-2 w-10 z-30 rounded-r-xl border-y border-r border-white/20 transition-all flex items-center justify-center ${currentPage === 0 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/40 hover:bg-black/60 active:bg-indigo-600 text-white'}`}
                     >
                         <ChevronLeft size={24} />
                     </button>
                     <button 
                         onClick={nextPage}
                         disabled={currentPage >= totalPages - 1}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full border border-white/20 transition-all ${currentPage >= totalPages - 1 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/50 hover:bg-black/80 active:scale-95 text-white'}`}
+                        className={`absolute right-0 top-10 bottom-2 w-10 z-30 rounded-l-xl border-y border-l border-white/20 transition-all flex items-center justify-center ${currentPage >= totalPages - 1 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/40 hover:bg-black/60 active:bg-indigo-600 text-white'}`}
                     >
                         <ChevronRight size={24} />
                     </button>
 
                     {/* GRID DISPLAY */}
-                    <div className="flex-1 p-4 flex items-center justify-center">
+                    <div className="flex-1 p-4 px-12 flex items-center justify-center">
                         <div className="grid grid-cols-4 grid-rows-3 gap-2 w-full h-full place-items-center">
                             {currentMonsters.map(monster => {
                                 const isSelected = currentTeam.find(m => m.id === monster.id);
@@ -305,7 +309,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                             )}
                                         </div>
                                         <div className="text-[8px] font-bold text-slate-800 truncate w-full text-center bg-white/50 rounded px-1 pointer-events-none mx-1">{monster.name}</div>
-                                        <div className="absolute top-0.5 right-0.5 flex items-center justify-center text-[10px] pointer-events-none filter drop-shadow-sm">
+                                        {/* Larger Type Icon */}
+                                        <div className="absolute -top-1 -right-1 flex items-center justify-center text-lg pointer-events-none filter drop-shadow-md">
                                             {TYPE_ICONS[monster.type]}
                                         </div>
                                     </div>
@@ -331,16 +336,16 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 </button>
             </div>
 
-            {/* Mobile Drag Ghost Element - LARGER & TRANSPARENT */}
+            {/* Mobile Drag Ghost Element - CLEAN, CENTERED, TRANSPARENT */}
             {dragMonster && (
                 <div 
-                    className="fixed w-28 h-28 rounded-full bg-indigo-600/60 backdrop-blur-sm border-4 border-white/50 z-[100] flex items-center justify-center pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-bounce shadow-2xl scale-110"
+                    className="fixed z-[100] flex items-center justify-center pointer-events-none transform -translate-x-1/2 -translate-y-1/2 opacity-70"
                     style={{ left: dragPos.x, top: dragPos.y }}
                 >
                      {dragMonster.image && !imgErrors[dragMonster.id] ? (
-                        <img src={dragMonster.image} alt={dragMonster.emoji} className="w-20 h-20 object-contain opacity-90" />
+                        <img src={dragMonster.image} alt={dragMonster.emoji} className="w-24 h-24 object-contain" />
                     ) : (
-                        <span className="text-6xl opacity-90">{dragMonster.emoji}</span>
+                        <span className="text-8xl">{dragMonster.emoji}</span>
                     )}
                 </div>
             )}

@@ -70,7 +70,7 @@ const App: React.FC = () => {
   const scaleEnemyHp = (baseEnemy: Boss, lvl: number, isFinal: boolean): Boss => {
       let scaledHp = baseEnemy.maxHp;
       if (isFinal) {
-          scaledHp = 50000;
+          scaledHp = 40000;
       } else if (lvl === 10 || lvl === 20 || lvl === 30) {
           scaledHp = baseEnemy.maxHp; 
       } else {
