@@ -22,6 +22,43 @@ export const TYPE_CHART: Record<ElementType, ElementType[]> = {
     'Hada': ['Dragón']
 };
 
+export const TYPE_ICONS: Record<ElementType, string> = {
+    'Fuego': '🔥',
+    'Agua': '💧',
+    'Planta': '🌿',
+    'Eléctrico': '⚡',
+    'Tierra': '⛰️',
+    'Roca': '🪨',
+    'Hielo': '❄️',
+    'Acero': '🛡️',
+    'Fantasma': '👻',
+    'Dragón': '🐲',
+    'Normal': '⚪',
+    'Bicho': '🪲',
+    'Volador': '🪶',
+    'Psíquico': '🔮',
+    'Hada': '✨'
+};
+
+// Small icons for the projectile stream
+export const TYPE_PROJECTILE_ICONS: Record<ElementType, string> = {
+    'Fuego': '🔥',
+    'Agua': '💧',
+    'Planta': '🍃',
+    'Eléctrico': '⚡',
+    'Tierra': '🪨',
+    'Roca': '🌑',
+    'Hielo': '🧊',
+    'Acero': '🔩',
+    'Fantasma': '🟣',
+    'Dragón': '🔥',
+    'Normal': '⭐',
+    'Bicho': '🦗',
+    'Volador': '🌪️',
+    'Psíquico': '🌀',
+    'Hada': '✨'
+};
+
 export const TYPE_PASTELS: Record<ElementType, string> = {
     'Fuego': 'bg-red-200/40 border-red-300/50',
     'Agua': 'bg-blue-200/40 border-blue-300/50',
@@ -58,6 +95,17 @@ export const TYPE_VIVID: Record<ElementType, string> = {
     'Hada': 'bg-rose-400'
 };
 
+// Interference Mapping
+export const INTERFERENCE_RULES: Record<ElementType, 'rock' | 'steel' | 'ice' | 'random'> = {
+    'Fuego': 'rock', 'Tierra': 'rock',
+    'Roca': 'steel', 'Acero': 'steel',
+    'Hielo': 'ice', 'Psíquico': 'ice', 'Agua': 'ice',
+    'Planta': 'rock', 'Eléctrico': 'steel', 'Bicho': 'rock',
+    'Fantasma': 'ice', 'Volador': 'rock', 'Hada': 'ice',
+    'Normal': 'random', 'Dragón': 'random'
+};
+
+
 // --- PREMIUM BACKGROUNDS ---
 const BG_DEFAULT = "bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black";
 
@@ -76,6 +124,7 @@ const BG_SKY = "bg-[linear-gradient(to_bottom,_var(--tw-gradient-stops))] from-s
 
 export const MONSTER_DB: Boss[] = [
     // STARTERS
+    // Fuego -> Descongela
     { 
         id: "m001", 
         name: "Simiobrasa", 
@@ -83,12 +132,13 @@ export const MONSTER_DB: Boss[] = [
         type: "Fuego", 
         maxHp: 800, 
         currentHp: 800, 
-        description: "Un mono con serios problemas de control de ira que intentó hacer una barbacoa y acabó incendiando medio bosque. Ahora busca redención asando malvaviscos.", 
+        description: "Un mono con serios problemas de control de ira que intentó hacer una barbacoa y acabó incendiando medio bosque.", 
         skillType: "clear_ice", 
         skillName: "Calor Corporal", 
-        skillCost: 8, 
-        skillDescription: "Derrite 5 Hielos." 
+        skillCost: 10, 
+        skillDescription: "Derrite 4 Hielos." 
     },
+    // Agua -> Rompe Rocas
     { 
         id: "m002", 
         name: "Aquapato", 
@@ -96,12 +146,13 @@ export const MONSTER_DB: Boss[] = [
         type: "Agua", 
         maxHp: 800, 
         currentHp: 800, 
-        description: "Un pato de goma que cobró vida tras caer en un residuo radiactivo. Tiene miedo al agua profunda y exige llevar siempre manguitos.", 
-        skillType: "damage_aoe", 
-        skillName: "Ola", 
+        description: "Un pato de goma que cobró vida tras caer en un residuo radiactivo. Tiene miedo al agua profunda.", 
+        skillType: "clear_rocks", 
+        skillName: "Chorro Presión", 
         skillCost: 10, 
-        skillDescription: "Inflige 300 de daño." 
+        skillDescription: "Rompe 4 Rocas." 
     },
+    // Planta -> Combo/Convert
     { 
         id: "m003", 
         name: "Hojaraptor", 
@@ -109,12 +160,13 @@ export const MONSTER_DB: Boss[] = [
         type: "Planta", 
         maxHp: 900, 
         currentHp: 900, 
-        description: "Un dinosaurio vegano extremo que solo come plantas de plástico porque dice que las reales tienen demasiados sentimientos.", 
-        skillType: "clear_rocks", 
-        skillName: "Látigo Cepa", 
-        skillCost: 8, 
-        skillDescription: "Rompe 5 Rocas." 
+        description: "Un dinosaurio vegano extremo que solo come plantas de plástico.", 
+        skillType: "convert_type", 
+        skillName: "Brotes Verdes", 
+        skillCost: 15, 
+        skillDescription: "Convierte 5 fichas en Hojaraptor." 
     },
+    // Eléctrico -> Descongela
     { 
         id: "m004", 
         name: "Chispamouse", 
@@ -122,44 +174,70 @@ export const MONSTER_DB: Boss[] = [
         type: "Eléctrico", 
         maxHp: 750, 
         currentHp: 750, 
-        description: "Roedor adicto a masticar cables de alta tensión. Su factura de la luz es astronómica y brilla en la oscuridad cuando se enfada.", 
-        skillType: "nuke", 
-        skillName: "Rayo", 
-        skillCost: 15, 
-        skillDescription: "Impacto de 800 daño." 
+        description: "Roedor adicto a masticar cables de alta tensión. Su factura de la luz es astronómica.", 
+        skillType: "clear_ice", 
+        skillName: "Cortocircuito", 
+        skillCost: 14, 
+        skillDescription: "Derrite 6 Hielos." 
     },
     
     // LEVEL 1-10
-    { id: "m005", name: "Rocaradillo", emoji: "🦔", type: "Tierra", maxHp: 1200, currentHp: 1200, description: "Descubrió que rodar es más rápido que caminar y ahora se niega a usar sus patas. Sufre mareos constantes pero no lo admite.", skillType: "clear_steel", skillName: "Terremoto", skillCost: 12, skillDescription: "Rompe 3 Aceros." },
-    { id: "m006", name: "Fantasmín", emoji: "👻", type: "Fantasma", maxHp: 1100, currentHp: 1100, description: "Un espectro con ansiedad social severa. Intenta asustar a la gente, pero si gritan se pone a llorar y pide perdón.", skillType: "damage_single", skillName: "Susto", skillCost: 6, skillDescription: "Golpe de 250 daño." },
-    { id: "m007", name: "Copo", emoji: "❄️", type: "Hielo", maxHp: 1300, currentHp: 1300, description: "Obsesionado con la geometría fractal. Si le dices que un copo de nieve no es perfectamente simétrico, entra en crisis existencial.", skillType: "clear_ice", skillName: "Deshielo", skillCost: 9, skillDescription: "Elimina 5 hielos." },
-    { id: "m008", name: "Gólem", emoji: "🗿", type: "Roca", maxHp: 2000, currentHp: 2000, description: "Una estatua de la Isla de Pascua que se cansó de mirar al horizonte y decidió salir a ver mundo, aunque se mueve a 1 km por año.", skillType: "damage_single", skillName: "Lanzarrocas", skillCost: 14, skillDescription: "Golpe de 600 daño." },
-    { id: "m009", name: "Electrobird", emoji: "🦅", type: "Eléctrico", maxHp: 1500, currentHp: 1500, description: "Se cree el rey de los cielos, pero en realidad trabaja como repetidor Wi-Fi para una compañía telefónica de bajo coste.", skillType: "damage_aoe", skillName: "Trueno", skillCost: 12, skillDescription: "Descarga de 500 daño." },
-    { id: "m010", name: "Draco", emoji: "🐉", type: "Dragón", maxHp: 3000, currentHp: 3000, description: "JEFE: Acumula oro compulsivamente, pero debido a la inflación, ahora solo guarda bitcoins en un disco duro que perdió hace años.", skillType: "nuke", skillName: "Cometa Draco", skillCost: 18, skillDescription: "Impacto de 1500 daño." },
+    // Tierra -> Rompe Acero
+    { id: "m005", name: "Rocaradillo", emoji: "🦔", type: "Tierra", maxHp: 1200, currentHp: 1200, description: "Descubrió que rodar es más rápido que caminar y ahora se niega a usar sus patas.", skillType: "clear_steel", skillName: "Terremoto", skillCost: 12, skillDescription: "Rompe 3 Aceros." },
+    // Fantasma -> Combo/Nuke
+    { id: "m006", name: "Fantasmín", emoji: "👻", type: "Fantasma", maxHp: 1100, currentHp: 1100, description: "Un espectro con ansiedad social severa.", skillType: "nuke", skillName: "Susto Mortal", skillCost: 18, skillDescription: "Daño fijo de 2000." },
+    // Hielo -> Rompe Rocas
+    { id: "m007", name: "Copo", emoji: "❄️", type: "Hielo", maxHp: 1300, currentHp: 1300, description: "Obsesionado con la geometría fractal.", skillType: "clear_rocks", skillName: "Desprendimiento", skillCost: 12, skillDescription: "Rompe 5 Rocas." },
+    // Roca -> Rompe Acero
+    { id: "m008", name: "Gólem", emoji: "🗿", type: "Roca", maxHp: 2000, currentHp: 2000, description: "Una estatua de la Isla de Pascua que se cansó de mirar al horizonte.", skillType: "clear_steel", skillName: "Cabezazo", skillCost: 15, skillDescription: "Rompe 4 Aceros." },
+    // Eléctrico -> Descongela
+    { id: "m009", name: "Electrobird", emoji: "🦅", type: "Eléctrico", maxHp: 1500, currentHp: 1500, description: "Se cree el rey de los cielos, pero trabaja como repetidor Wi-Fi.", skillType: "clear_ice", skillName: "Onda Cálida", skillCost: 12, skillDescription: "Derrite 5 Hielos." },
+    // Dragón (Boss) -> Random/Any
+    { id: "m010", name: "Draco", emoji: "🐉", type: "Dragón", maxHp: 3000, currentHp: 3000, description: "JEFE: Acumula oro compulsivamente.", skillType: "clear_random", skillName: "Caos Dracónico", skillCost: 15, skillDescription: "Elimina 5 casillas al azar." },
     
     // LEVEL 11-20
-    { id: "m011", name: "AceroBot", emoji: "🤖", type: "Acero", maxHp: 3500, currentHp: 3500, description: "Un robot de limpieza que cobró conciencia y decidió que la humanidad es la mancha más difícil de quitar.", skillType: "clear_rocks", skillName: "Taladro", skillCost: 10, skillDescription: "Destruye 6 Rocas." },
-    { id: "m012", name: "Magmablob", emoji: "🌋", type: "Fuego", maxHp: 3800, currentHp: 3800, description: "Una montaña con acidez estomacal crónica. Escupe lava cuando se ríe, lo cual hace que sus fiestas sean bastante peligrosas.", skillType: "damage_aoe", skillName: "Erupción", skillCost: 15, skillDescription: "Gran daño en área." },
-    { id: "m013", name: "Cactus", emoji: "🌵", type: "Planta", maxHp: 3200, currentHp: 3200, description: "Quiere abrazar a todo el mundo para demostrar su afecto, pero nadie le devuelve el abrazo por razones punzantes y obvias.", skillType: "damage_single", skillName: "Pincho Cañón", skillCost: 8, skillDescription: "Golpe de 400 daño." },
-    { id: "m014", name: "Tibucyber", emoji: "🦈", type: "Agua", maxHp: 4000, currentHp: 4000, description: "Un tiburón que aprendió a programar en Python. Hackea barcos pesqueros y transfiere sus fondos a ONGs de conservación marina.", skillType: "damage_single", skillName: "Hidrobomba", skillCost: 12, skillDescription: "Golpe de 800 daño." },
-    { id: "m015", name: "Ojo Sombra", emoji: "👁️", type: "Fantasma", maxHp: 3600, currentHp: 3600, description: "Te está mirando. Sí, a ti. Y juzga tus decisiones de vida, especialmente esa camisa que llevas puesta hoy.", skillType: "convert_type", skillName: "Hipnosis", skillCost: 12, skillDescription: "Transforma fichas." },
-    { id: "m016", name: "Zombi", emoji: "🧟", type: "Fantasma", maxHp: 4200, currentHp: 4200, description: "Se hizo vegano después de morir. Ahora vaga por el mundo buscando cerebros de coliflor y tofu fermentado.", skillType: "damage_single", skillName: "Mordisco", skillCost: 8, skillDescription: "Golpe de 500 daño." },
-    { id: "m017", name: "Alien", emoji: "👽", type: "Acero", maxHp: 4500, currentHp: 4500, description: "Vino a invadir la Tierra pero descubrió TikTok y ahora se pasa el día haciendo bailes virales en su platillo volante.", skillType: "nuke", skillName: "Láser", skillCost: 16, skillDescription: "Impacto de 1200 daño." },
-    { id: "m018", name: "Kraken", emoji: "🐙", type: "Agua", maxHp: 5000, currentHp: 5000, description: "Un cefalópodo incomprendido que solo quiere chocar los cinco, pero accidentalmente hunde destructores navales con su entusiasmo.", skillType: "damage_aoe", skillName: "Tinta", skillCost: 14, skillDescription: "Golpe de 600 daño." },
-    { id: "m019", name: "Yeti", emoji: "🦍", type: "Hielo", maxHp: 5500, currentHp: 5500, description: "El campeón indiscutible de las escondidas. Lleva 50 años ganando y ya se está aburriendo de que nadie lo encuentre.", skillType: "clear_ice", skillName: "Puño Hielo", skillCost: 10, skillDescription: "Rompe 6 hielos." },
-    { id: "m020", name: "Fénix", emoji: "🦅", type: "Fuego", maxHp: 6000, currentHp: 6000, description: "JEFE: Dramático por naturaleza. Cada vez que tiene un mal día se convierte en cenizas solo para llamar la atención y resurgir.", skillType: "damage_aoe", skillName: "Llamarada", skillCost: 18, skillDescription: "Impacto de 1000 daño." },
+    // Acero -> Rompe Acero
+    { id: "m011", name: "AceroBot", emoji: "🤖", type: "Acero", maxHp: 3500, currentHp: 3500, description: "Un robot de limpieza que cobró conciencia.", skillType: "clear_steel", skillName: "Taladro", skillCost: 18, skillDescription: "Rompe 5 Aceros." },
+    // Fuego -> Descongela
+    { id: "m012", name: "Magmablob", emoji: "🌋", type: "Fuego", maxHp: 3800, currentHp: 3800, description: "Una montaña con acidez estomacal crónica.", skillType: "clear_ice", skillName: "Erupción", skillCost: 15, skillDescription: "Derrite 6 Hielos." },
+    // Planta -> Convert
+    { id: "m013", name: "Cactus", emoji: "🌵", type: "Planta", maxHp: 3200, currentHp: 3200, description: "Quiere abrazar a todo el mundo para demostrar su afecto.", skillType: "convert_type", skillName: "Espinas Amigas", skillCost: 18, skillDescription: "Convierte 6 fichas en Cactus." },
+    // Agua -> Rompe Rocas
+    { id: "m014", name: "Tibucyber", emoji: "🦈", type: "Agua", maxHp: 4000, currentHp: 4000, description: "Un tiburón que aprendió a programar en Python.", skillType: "clear_rocks", skillName: "Torpedos", skillCost: 15, skillDescription: "Rompe 6 Rocas." },
+    // Fantasma -> Combo/Self Clear
+    { id: "m015", name: "Ojo Sombra", emoji: "👁️", type: "Fantasma", maxHp: 3600, currentHp: 3600, description: "Te está mirando y juzga tus decisiones.", skillType: "clear_self", skillName: "Desvanecerse", skillCost: 14, skillDescription: "Elimina 6 Ojos Sombra." },
+    // Fantasma -> Nuke
+    { id: "m016", name: "Zombi", emoji: "🧟", type: "Fantasma", maxHp: 4200, currentHp: 4200, description: "Se hizo vegano después de morir.", skillType: "nuke", skillName: "Infección", skillCost: 20, skillDescription: "Daño fijo de 2500." },
+    // Acero -> Rompe Acero
+    { id: "m017", name: "Alien", emoji: "👽", type: "Acero", maxHp: 4500, currentHp: 4500, description: "Vino a invadir la Tierra pero descubrió TikTok.", skillType: "clear_steel", skillName: "Rayo Tractor", skillCost: 15, skillDescription: "Rompe 4 Aceros." },
+    // Agua -> Rompe Rocas
+    { id: "m018", name: "Kraken", emoji: "🐙", type: "Agua", maxHp: 5000, currentHp: 5000, description: "Un cefalópodo incomprendido que solo quiere chocar los cinco.", skillType: "clear_rocks", skillName: "Tentáculos", skillCost: 12, skillDescription: "Rompe 5 Rocas." },
+    // Hielo -> Rompe Rocas
+    { id: "m019", name: "Yeti", emoji: "🦍", type: "Hielo", maxHp: 5500, currentHp: 5500, description: "El campeón indiscutible de las escondidas.", skillType: "clear_rocks", skillName: "Avalancha", skillCost: 15, skillDescription: "Rompe 6 Rocas." },
+    // Fuego (Boss) -> Descongela
+    { id: "m020", name: "Fénix", emoji: "🦅", type: "Fuego", maxHp: 6000, currentHp: 6000, description: "JEFE: Dramático por naturaleza.", skillType: "clear_ice", skillName: "Renacer", skillCost: 15, skillDescription: "Derrite 6 Hielos." },
 
     // HARD MODE
-    { id: "m021", name: "Vampiro", emoji: "🧛", type: "Fantasma", maxHp: 7000, currentHp: 7000, description: "Odia trabajar de noche y tiene déficit de vitamina D. Se pasa el día quejándose del precio de los ataúdes ergonómicos.", skillType: "damage_single", skillName: "Drenaje", skillCost: 12, skillDescription: "Golpe de 800 daño." },
-    { id: "m022", name: "Genio", emoji: "🧞", type: "Eléctrico", maxHp: 7500, currentHp: 7500, description: "Un bromista cósmico. Si le pides un deseo, se asegurará de interpretarlo de la forma más literal y molesta posible.", skillType: "convert_type", skillName: "Magia", skillCost: 15, skillDescription: "Caos en el tablero." },
-    { id: "m023", name: "Oni", emoji: "👹", type: "Roca", maxHp: 8000, currentHp: 8000, description: "Un demonio japonés que dejó el mal para dedicarse a la crítica gastronómica. Es muy exigente con el punto de sal.", skillType: "clear_steel", skillName: "Garrote", skillCost: 14, skillDescription: "Rompe 4 Aceros." },
-    { id: "m024", name: "Payaso", emoji: "🤡", type: "Normal", maxHp: 8500, currentHp: 8500, description: "Se ríe solo en rincones oscuros. Nadie sabe si está contando chistes o planeando la dominación mundial.", skillType: "nuke", skillName: "Bomba", skillCost: 20, skillDescription: "Impacto de 2000 daño." },
-    { id: "m025", name: "Unicornio", emoji: "🦄", type: "Hielo", maxHp: 9000, currentHp: 9000, description: "Tan vanidoso que se detiene en mitad de la batalla para arreglarse el flequillo. Su cuerno es en realidad un cucurucho de helado.", skillType: "clear_rocks", skillName: "Cuerno Mágico", skillCost: 15, skillDescription: "Elimina 8 rocas." },
-    { id: "m026", name: "T-Rex", emoji: "🦖", type: "Dragón", maxHp: 10000, currentHp: 10000, description: "Está muy enfadado porque no puede abrocharse los zapatos ni aplaudir en los conciertos. Su rabia es comprensible.", skillType: "damage_single", skillName: "Mordisco Feroz", skillCost: 15, skillDescription: "Impacto de 1500 daño." },
-    { id: "m027", name: "Cthulhu", emoji: "🦑", type: "Agua", maxHp: 12000, currentHp: 12000, description: "Una deidad primigenia que duerme bajo el mar, pero se despierta de mal humor si los barcos hacen mucho ruido al pasar.", skillType: "damage_aoe", skillName: "Locura", skillCost: 20, skillDescription: "Impacto de 1500 daño." },
-    { id: "m028", name: "Muerte", emoji: "💀", type: "Fantasma", maxHp: 14000, currentHp: 14000, description: "Está considerando seriamente jubilarse y abrir una floristería. Dice que está cansada de tanta negatividad laboral.", skillType: "nuke", skillName: "Guadaña", skillCost: 25, skillDescription: "Impacto de 3000 daño." },
-    { id: "m029", name: "Sol", emoji: "🌞", type: "Fuego", maxHp: 16000, currentHp: 16000, description: "Tiene un ego tan grande como su masa gravitatoria. Exige que todos los planetas giren a su alrededor literalmente.", skillType: "damage_aoe", skillName: "Supernova", skillCost: 30, skillDescription: "Impacto de 2500 daño." },
-    { id: "m030", name: "Rey Slime", emoji: "👑", type: "Normal", maxHp: 20000, currentHp: 20000, description: "JEFE: Una masa gelatinosa con corona que se cree de la realeza. Es pegajoso, huele a chicle de fresa y exige impuestos.", skillType: "nuke", skillName: "Aplastar", skillCost: 40, skillDescription: "Impacto de 5000 daño." },
+    // Fantasma -> Convert
+    { id: "m021", name: "Vampiro", emoji: "🧛", type: "Fantasma", maxHp: 7000, currentHp: 7000, description: "Odia trabajar de noche y tiene déficit de vitamina D.", skillType: "convert_type", skillName: "Hipnosis", skillCost: 20, skillDescription: "Convierte 7 fichas en Vampiros." },
+    // Eléctrico -> Descongela
+    { id: "m022", name: "Genio", emoji: "🧞", type: "Eléctrico", maxHp: 7500, currentHp: 7500, description: "Un bromista cósmico.", skillType: "clear_ice", skillName: "Deseo Ardiente", skillCost: 18, skillDescription: "Derrite 7 Hielos." },
+    // Roca -> Rompe Acero
+    { id: "m023", name: "Oni", emoji: "👹", type: "Roca", maxHp: 8000, currentHp: 8000, description: "Un demonio japonés crítico gastronómico.", skillType: "clear_steel", skillName: "Garrote", skillCost: 18, skillDescription: "Rompe 5 Aceros." },
+    // Normal -> Random Clear
+    { id: "m024", name: "Payaso", emoji: "🤡", type: "Normal", maxHp: 8500, currentHp: 8500, description: "Se ríe solo en rincones oscuros.", skillType: "clear_random", skillName: "Broma Pesada", skillCost: 16, skillDescription: "Elimina 6 casillas al azar." },
+    // Hielo -> Rompe Rocas
+    { id: "m025", name: "Unicornio", emoji: "🦄", type: "Hielo", maxHp: 9000, currentHp: 9000, description: "Tan vanidoso que se detiene en mitad de la batalla para arreglarse.", skillType: "clear_rocks", skillName: "Cuerno Taladro", skillCost: 18, skillDescription: "Elimina 7 Rocas." },
+    // Dragón -> Clear Self
+    { id: "m026", name: "T-Rex", emoji: "🦖", type: "Dragón", maxHp: 10000, currentHp: 10000, description: "Está muy enfadado porque no puede abrocharse los zapatos.", skillType: "clear_self", skillName: "Rugido", skillCost: 15, skillDescription: "Elimina 7 T-Rex." },
+    // Agua -> Rompe Rocas
+    { id: "m027", name: "Cthulhu", emoji: "🦑", type: "Agua", maxHp: 12000, currentHp: 12000, description: "Una deidad primigenia que duerme bajo el mar.", skillType: "clear_rocks", skillName: "Profundidades", skillCost: 20, skillDescription: "Rompe 8 Rocas." },
+    // Fantasma -> Nuke
+    { id: "m028", name: "Muerte", emoji: "💀", type: "Fantasma", maxHp: 14000, currentHp: 14000, description: "Está considerando seriamente jubilarse y abrir una floristería.", skillType: "nuke", skillName: "Final", skillCost: 25, skillDescription: "Daño fijo de 3500." },
+    // Fuego -> Descongela
+    { id: "m029", name: "Sol", emoji: "🌞", type: "Fuego", maxHp: 16000, currentHp: 16000, description: "Tiene un ego tan grande como su masa gravitatoria.", skillType: "clear_ice", skillName: "Supernova", skillCost: 25, skillDescription: "Derrite 8 Hielos." },
+    // Normal (Boss) -> Convert
+    { id: "m030", name: "Rey Slime", emoji: "👑", type: "Normal", maxHp: 20000, currentHp: 20000, description: "JEFE: Una masa gelatinosa con corona.", skillType: "convert_type", skillName: "Real Decreto", skillCost: 25, skillDescription: "Convierte 8 fichas en Rey Slime." },
 ];
 
 export const SECRET_BOSS: Boss = {
@@ -169,11 +247,11 @@ export const SECRET_BOSS: Boss = {
     type: "Normal", 
     maxHp: 40000, 
     currentHp: 40000, 
-    description: "La entidad suprema del mundo digital. Ha visto tu historial de búsqueda y te está juzgando silenciosamente detrás de esas gafas de sol.", 
-    skillType: "nuke", 
+    description: "La entidad suprema del mundo digital.", 
+    skillType: "clear_random", 
     skillName: "Banhammer", 
-    skillCost: 40, 
-    skillDescription: "Impacto de 9999 daño."
+    skillCost: 30, 
+    skillDescription: "Elimina 10 casillas al azar."
 };
 
 export const getLevelBackground = (level: number, type: ElementType): string => {

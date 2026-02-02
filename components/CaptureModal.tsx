@@ -64,7 +64,7 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                             setCaught(false);
                             setPhase('result'); // Boss flees
                             soundManager.playLose();
-                            setTimeout(() => onCaptureEnd(false), 2000);
+                            setTimeout(() => onCaptureEnd(false), 3500); // Increased time to see the sad text
                         }
                     }
                 }, 800); // Time between LEDs
@@ -125,7 +125,8 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                 </div>
 
                 {/* 2. THE BEAM (Connecting Device to Boss) - ELECTRIC EFFECT - INFINITE HEIGHT */}
-                {(phase === 'scanning' || phase === 'absorbing' || (phase === 'result' && !caught)) && (
+                {/* UPDATED: Only show beam during active scanning or absorbing. Stops immediately on result/fail. */}
+                {(phase === 'scanning' || phase === 'absorbing') && (
                     <div className="absolute bottom-40 left-1/2 transform -translate-x-1/2 w-16 md:w-32 h-[150vh] z-20 origin-bottom pointer-events-none">
                         {/* Core Beam */}
                         <div className="w-full h-full bg-gradient-to-t from-indigo-400 via-cyan-300 to-transparent opacity-60 animate-beam-pulse blur-xl"></div>
@@ -149,7 +150,16 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                     </div>
                 )}
 
-                {/* 4. THE DEVICE (Pokedex Style - Bottom) */}
+                {/* 4. "¡ESCAPÓ!" TEXT (Fail) - DROOPING SAD ANIMATION */}
+                {phase === 'result' && !caught && (
+                    <div className="absolute top-1/3 inset-x-0 z-[60] flex items-center justify-center pointer-events-none">
+                        <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-slate-300 to-slate-500 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] animate-droop text-center tracking-tighter w-full transform origin-top-left">
+                            ¡ESCAPÓ!
+                        </h1>
+                    </div>
+                )}
+
+                {/* 5. THE DEVICE (Pokedex Style - Bottom) */}
                 <div className="relative z-30 mb-8 pointer-events-auto">
                     
                     {/* Prompt Text */}
@@ -263,6 +273,17 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                 }
                 .animate-zoom-stamp {
                     animation: zoom-stamp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+                }
+                
+                /* SIMPLIFIED DROOP ANIMATION - REDUCED TILT */
+                @keyframes droop {
+                    0% { transform: rotate(0deg) scale(0.8); opacity: 0; }
+                    20% { transform: rotate(0deg) scale(1); opacity: 1; }
+                    40% { transform: rotate(0deg); } /* Hold steady */
+                    100% { transform: rotate(10deg) translateY(20px); opacity: 1; } /* Reduced drop and tilt by half */
+                }
+                .animate-droop {
+                    animation: droop 1.5s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
                 }
 
                 @keyframes shake-device {

@@ -15,7 +15,7 @@ export interface TileData {
   statusLife?: number; 
 }
 
-export type SkillType = 'damage_single' | 'damage_aoe' | 'heal_turns' | 'clear_rocks' | 'clear_ice' | 'clear_steel' | 'convert_type' | 'nuke';
+export type SkillType = 'damage_single' | 'damage_aoe' | 'heal_turns' | 'clear_rocks' | 'clear_ice' | 'clear_steel' | 'convert_type' | 'nuke' | 'clear_random' | 'clear_self';
 
 export interface Boss {
   id: string;

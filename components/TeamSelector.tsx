@@ -1,8 +1,8 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Boss, ElementType } from '../types';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ArrowLeft } from 'lucide-react';
 import { soundManager } from '../utils/sound';
-import { getLevelBackground, TYPE_PASTELS } from '../constants';
+import { getLevelBackground, TYPE_PASTELS, TYPE_ICONS } from '../constants';
 
 interface TeamSelectorProps {
     collection: Boss[];
@@ -12,31 +12,16 @@ interface TeamSelectorProps {
     nextLevel: number;
     nextEnemy: Boss;
     movesLeft: number; 
+    onBackToMenu: () => void;
 }
 
 const ITEMS_PER_PAGE = 12; // 3 rows * 4 columns
 
-// Helper for type icons
-const TYPE_ICONS: Record<ElementType, string> = {
-    'Fuego': '🔥',
-    'Agua': '💧',
-    'Planta': '🌿',
-    'Eléctrico': '⚡',
-    'Tierra': '🏜️',
-    'Roca': '🪨',
-    'Hielo': '❄️',
-    'Acero': '🛡️',
-    'Fantasma': '👻',
-    'Dragón': '🐲',
-    'Normal': '⚪',
-    'Bicho': '🪲',
-    'Volador': '🪶',
-    'Psíquico': '🔮',
-    'Hada': '✨'
-};
+const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, onUpdateTeam, onStart, nextLevel, nextEnemy, movesLeft, onBackToMenu }) => {
+    // Modal State for Long Press
+    const [detailModalMonster, setDetailModalMonster] = useState<Boss | null>(null);
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, onUpdateTeam, onStart, nextLevel, nextEnemy, movesLeft }) => {
-    const [hoveredMonster, setHoveredMonster] = useState<Boss | null>(null);
     const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
     const [currentPage, setCurrentPage] = useState(0);
     
@@ -76,6 +61,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     // --- DESKTOP DND HANDLERS ---
     const handleDragStart = (e: React.DragEvent, monster: Boss) => {
         e.dataTransfer.setData('monsterId', monster.id);
+        // Clear long press if dragging starts
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
     };
 
     const handleDrop = (e: React.DragEvent, slotIndex: number) => {
@@ -91,28 +78,47 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
         e.preventDefault();
     };
 
-    // --- MOBILE TOUCH HANDLERS (IMMEDIATE DRAG) ---
-    const handleTouchStart = (e: React.TouchEvent, monster: Boss) => {
-        const touch = e.touches[0];
-        setDragMonster(monster);
-        setDragPos({ x: touch.clientX, y: touch.clientY });
-        soundManager.playButton(); 
+    // --- TOUCH & LONG PRESS HANDLERS ---
+    const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, monster: Boss) => {
+        // Start Long Press Timer (Changed to 200ms)
+        longPressTimer.current = setTimeout(() => {
+            setDetailModalMonster(monster);
+            soundManager.playButton();
+        }, 200);
+
+        if ('touches' in e) {
+            const touch = e.touches[0];
+            setDragMonster(monster);
+            setDragPos({ x: touch.clientX, y: touch.clientY });
+        }
+    };
+
+    const handlePointerUp = () => {
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+        setDetailModalMonster(null); // Close modal on release
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
+        // If moved, cancel long press
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+
         if (dragMonster) {
-            if (e.cancelable) e.preventDefault(); // Prevent scrolling while dragging
+            if (e.cancelable) e.preventDefault(); 
             const touch = e.touches[0];
             setDragPos({ x: touch.clientX, y: touch.clientY });
         }
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
+        handlePointerUp(); // Handle modal close
+        
         if (dragMonster) {
             const touch = e.changedTouches[0];
             const target = document.elementFromPoint(touch.clientX, touch.clientY);
             
-            // Find if we dropped on a slot
             const slotElement = target?.closest('[data-slot-index]');
             if (slotElement) {
                 const index = parseInt(slotElement.getAttribute('data-slot-index') || '-1');
@@ -125,7 +131,6 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
         }
     };
 
-    // --- SHARED LOGIC ---
     const equipMonster = (monster: Boss, slotIndex: number) => {
         const newTeam = [...currentTeam];
         const existingIdx = newTeam.findIndex(m => m.id === monster.id);
@@ -152,6 +157,14 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
             {/* Lighter overlay */}
             <div className="absolute inset-0 bg-slate-900/40 pointer-events-none"></div>
 
+            {/* BACK TO MENU BUTTON */}
+            <button 
+                onClick={() => { soundManager.playButton(); onBackToMenu(); }} 
+                className="absolute top-4 left-4 z-50 p-3 bg-slate-800/80 rounded-full border border-slate-600 text-slate-300 hover:bg-red-900/80 hover:text-white hover:border-red-500 shadow-lg backdrop-blur-sm transition-all active:scale-95"
+            >
+                <ArrowLeft size={20} />
+            </button>
+
             <div className="relative z-10 w-full flex flex-col items-center flex-1 overflow-hidden max-w-xl mx-auto">
                 <h1 className="text-3xl font-black text-white italic mb-2 uppercase tracking-widest drop-shadow-md">
                     Fase {nextLevel}
@@ -177,25 +190,15 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                         )}
                     </div>
                     <div className="flex-1">
-                        <span className="bg-slate-900 text-xs px-2 py-1 rounded text-slate-300 border border-slate-700 font-bold uppercase">
-                            Tipo: {nextEnemy.type}
+                         <span className="bg-slate-900 text-sm px-3 py-1.5 rounded-full text-slate-300 border border-slate-700 font-bold uppercase flex items-center gap-2 w-fit">
+                            Tipo: <span className="text-xl">{TYPE_ICONS[nextEnemy.type]}</span>
                         </span>
                     </div>
                 </div>
 
-                {/* Moves Info */}
-                <div className="mb-4 bg-black/40 px-4 py-1.5 rounded-full text-xs text-slate-300 font-mono border border-white/10 shadow-lg">
+                {/* Moves Info - REDUCED MARGIN BOTTOM */}
+                <div className="mb-2 bg-black/40 px-4 py-1.5 rounded-full text-xs text-slate-300 font-mono border border-white/10 shadow-lg">
                     TURNOS DISPONIBLES: <span className="text-white font-bold text-base ml-1">{movesLeft}</span>
-                </div>
-
-                {/* Info Box */}
-                <div className="h-10 w-full flex items-center justify-center mb-1">
-                    {hoveredMonster && (
-                        <div className="bg-slate-800/90 px-4 py-2 rounded-xl border border-yellow-500/50 text-center animate-in fade-in zoom-in duration-200 shadow-xl backdrop-blur-sm z-20">
-                            <span className="text-yellow-400 font-bold text-xs block">{hoveredMonster.skillName}</span>
-                            <span className="text-slate-300 text-[10px]">{hoveredMonster.skillDescription}</span>
-                        </div>
-                    )}
                 </div>
 
                 {/* Active Team Slots */}
@@ -207,15 +210,13 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                             return (
                                 <div 
                                     key={idx} 
-                                    data-slot-index={idx} // Needed for touch drop detection
+                                    data-slot-index={idx}
                                     onDragOver={handleDragOver}
                                     onDrop={(e) => handleDrop(e, idx)}
-                                    // Removed overflow-hidden to allow type icon to overlap border
                                     className="flex-1 bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner"
                                 >
                                     {member ? (
                                         <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900/40 rounded-xl">
-                                            {/* Reverted Size to w-10 h-10 */}
                                             <div className="w-10 h-10 mb-1 flex items-center justify-center filter drop-shadow-md">
                                                 {member.image && !imgErrors[member.id] ? (
                                                     <img 
@@ -229,8 +230,6 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                                 )}
                                             </div>
                                             <div className="text-[10px] font-bold text-indigo-200 truncate w-full text-center px-1">{member.name}</div>
-                                            
-                                            {/* Enlarged Type Icon */}
                                             <div className="absolute -top-1 -right-1 flex items-center justify-center text-lg pointer-events-none filter drop-shadow-md">
                                                 {TYPE_ICONS[member.type]}
                                             </div>
@@ -251,7 +250,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                         <span className="text-[10px] text-slate-300 ml-2">({currentPage + 1}/{totalPages || 1})</span>
                     </div>
                     
-                    {/* Navigation Arrows - Vertical Rectangles */}
+                    {/* Navigation Arrows */}
                     <button 
                         onClick={prevPage}
                         disabled={currentPage === 0}
@@ -280,15 +279,17 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                         draggable={true}
                                         onDragStart={(e) => handleDragStart(e, monster)}
                                         
-                                        // Touch handlers (Immediate Drag)
-                                        onTouchStart={(e) => handleTouchStart(e, monster)}
+                                        // Touch / Mouse Down for Long Press
+                                        onMouseDown={(e) => handlePointerDown(e as any, monster)}
+                                        onMouseUp={handlePointerUp}
+                                        onMouseLeave={handlePointerUp}
+
+                                        onTouchStart={(e) => handlePointerDown(e, monster)}
                                         onTouchMove={handleTouchMove}
                                         onTouchEnd={handleTouchEnd}
                                         
-                                        onMouseEnter={() => setHoveredMonster(monster)}
-                                        onMouseLeave={() => setHoveredMonster(null)}
                                         className={`
-                                            w-full h-full max-w-[5rem] max-h-[5rem] rounded-xl flex flex-col items-center justify-center border-2 relative cursor-grab active:cursor-grabbing transition-transform select-none
+                                            w-full aspect-square max-w-[5rem] rounded-xl flex flex-col items-center justify-center border-2 relative cursor-grab active:cursor-grabbing transition-transform select-none flex-shrink-0
                                             ${bgColor}
                                             ${isSelected 
                                                 ? 'opacity-40 grayscale scale-95' 
@@ -320,7 +321,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                     </div>
                 </div>
 
-                {/* Fight Button - Bottom, Big, Centered */}
+                {/* Fight Button */}
                 <button 
                     onClick={() => { soundManager.playButton(); onStart(); }}
                     disabled={!isTeamValid}
@@ -336,7 +337,18 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 </button>
             </div>
 
-            {/* Mobile Drag Ghost Element - CLEAN, CENTERED, TRANSPARENT */}
+            {/* DETAILS MODAL (LONG PRESS) */}
+            {detailModalMonster && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+                    <div className="bg-slate-900/95 p-6 rounded-3xl border-2 border-yellow-500 shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-in zoom-in duration-200 flex flex-col items-center max-w-xs text-center backdrop-blur-xl">
+                         <h3 className="text-2xl font-black text-yellow-400 mb-2">{detailModalMonster.skillName}</h3>
+                         <p className="text-white font-bold mb-4">{detailModalMonster.skillDescription}</p>
+                         <div className="text-xs text-slate-400 italic">Coste: {detailModalMonster.skillCost}</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Mobile Drag Ghost Element */}
             {dragMonster && (
                 <div 
                     className="fixed z-[100] flex items-center justify-center pointer-events-none transform -translate-x-1/2 -translate-y-1/2 opacity-70"

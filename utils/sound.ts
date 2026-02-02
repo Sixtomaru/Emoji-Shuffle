@@ -85,17 +85,68 @@ class SoundManager {
   }
 
   playBeam() {
-      this.playTone(880, 'sawtooth', 0.1, 0.1);
-      this.playTone(1760, 'sine', 0.2, 0.1, 0.1);
+    if (!this.enabled || !this.ctx) return;
+    this.init();
+    
+    // Sci-fi charging beam sound
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1500, this.ctx.currentTime + 0.4); // Pitch up
+    
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.4);
   }
 
   playWin() {
-    // Victory Melody - Pleasant, simple, low pitch "Phase Clear"
-    // C3, E3, G3 (C Major low octave)
-    const notes = [261.63, 329.63, 392.00]; 
+    if (!this.enabled || !this.ctx) return;
+    this.init();
+    const t = this.ctx.currentTime;
+
+    // PLEASANT SURPRISE CHIME (Ascending Major Arpeggio + High Sparkle)
+    // C5, E5, G5, C6
+    const notes = [523.25, 659.25, 783.99, 1046.50];
+    
     notes.forEach((freq, i) => {
-      this.playTone(freq, 'triangle', 0.5, 0.3, i * 0.2); // Slower pacing, triangle wave for softer sound
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        
+        // Sine for pure bell tone, Triangle for body
+        osc.type = i === notes.length - 1 ? 'sine' : 'triangle'; 
+        osc.frequency.setValueAtTime(freq, t + (i * 0.08)); // Staggered start (Arpeggio)
+
+        gain.gain.setValueAtTime(0, t + (i * 0.08));
+        gain.gain.linearRampToValueAtTime(0.3, t + (i * 0.08) + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + (i * 0.08) + 0.8); // Long sustain
+
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+        
+        osc.start(t + (i * 0.08));
+        osc.stop(t + (i * 0.08) + 1.0);
     });
+
+    // Add a high "Sparkle" at the end
+    const sparkleOsc = this.ctx.createOscillator();
+    const sparkleGain = this.ctx.createGain();
+    sparkleOsc.type = 'sine';
+    sparkleOsc.frequency.setValueAtTime(2093.00, t + 0.4); // C7
+    sparkleGain.gain.setValueAtTime(0, t + 0.4);
+    sparkleGain.gain.linearRampToValueAtTime(0.1, t + 0.45);
+    sparkleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+    
+    sparkleOsc.connect(sparkleGain);
+    sparkleGain.connect(this.ctx.destination);
+    sparkleOsc.start(t + 0.4);
+    sparkleOsc.stop(t + 0.8);
   }
 
   playLose() {

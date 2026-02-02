@@ -16,31 +16,34 @@ const Tile: React.FC<TileProps> = React.memo(({ tile, isSelected, isDragging, on
   const isRock = tile.status === 'rock';
   const isSteel = tile.status === 'steel';
   const isFrozen = tile.status === 'ice';
+  
+  // Disable interaction for Rock, Steel, and Frozen tiles
+  const isInteractive = !isRock && !isSteel && !isFrozen; 
+
+  // Normal tiles get type-based color, Frozen tiles preserve type color but lighter/blue-tinted via overlay
   const typeStyle = !isRock && !isSteel ? (TYPE_PASTELS[tile.type] || 'bg-slate-700') : '';
 
-  // Configuración del "Motor de Física" - CAÍDA AÚN MÁS LENTA
-  // Stiffness reducido drásticamente (70) para una caída más lenta visualmente
-  // Damping aumentado (30) para evitar rebotes excesivos con la baja velocidad
-  // Mass aumentado (1.5) para dar sensación de peso
+  // Configuración del "Motor de Física" - Gravedad Independiente por Columna
+  // REDUCED STIFFNESS AGAIN to ~50 for even slower/floatier fall
   const springConfig = {
     type: "spring" as const,
-    stiffness: 70,  
-    damping: 15,    
+    stiffness: 50 + (tile.x % 3) * 10, // Reduced from 70+
+    damping: 15 + (tile.x % 2) * 2,    
     mass: 1       
   };
 
   return (
     <motion.div
-      onPointerDown={(e) => onPointerDown(e, tile.id)}
+      onPointerDown={(e) => isInteractive && onPointerDown(e, tile.id)}
       
-      // Initial state: IMPORTANTE incluir la X para que caiga recto en su columna
+      // Initial state
       initial={tile.id.startsWith('spawn') ? { 
           x: `${tile.x * 100}%`, 
           y: '-150%', 
           opacity: 0 
       } : false}
       
-      // The Physics Target: Where should the tile be?
+      // The Physics Target
       animate={{
         x: `${tile.x * 100}%`,
         y: `${tile.y * 100}%`,
@@ -50,7 +53,6 @@ const Tile: React.FC<TileProps> = React.memo(({ tile, isSelected, isDragging, on
         filter: tile.isMatched ? 'brightness(2)' : 'brightness(1)',
       }}
       
-      // Apply the physics config
       transition={springConfig}
 
       style={{
@@ -64,8 +66,8 @@ const Tile: React.FC<TileProps> = React.memo(({ tile, isSelected, isDragging, on
       
       draggable={false}
       className={`
-        p-1 touch-none select-none
-        will-change-transform
+        p-1 touch-none select-none will-change-transform
+        ${!isInteractive ? 'cursor-not-allowed' : ''}
       `}
     >
       <div
@@ -73,14 +75,13 @@ const Tile: React.FC<TileProps> = React.memo(({ tile, isSelected, isDragging, on
           w-full h-full flex items-center justify-center 
           text-3xl sm:text-4xl md:text-5xl 
           rounded-xl border-[3px] relative overflow-hidden
-          cursor-grab active:cursor-grabbing
+          ${isInteractive ? 'cursor-grab active:cursor-grabbing' : ''}
           ${isSelected 
             ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.6)]' 
             : 'hover:brightness-110 shadow-sm'
           }
           ${isRock ? 'bg-stone-700 border-stone-500 shadow-inner' : 
             isSteel ? 'bg-slate-800 border-slate-400 shadow-inner' : 
-            isFrozen ? 'border-cyan-300/80 bg-cyan-50/10' :
             typeStyle}
         `}
       >
@@ -94,10 +95,12 @@ const Tile: React.FC<TileProps> = React.memo(({ tile, isSelected, isDragging, on
                  <div className="w-6 h-6 bg-slate-900 rounded-full flex items-center justify-center border border-slate-500 z-10">
                     <span className="text-[10px] font-bold text-white">{tile.statusLife}</span>
                  </div>
+                 <span className="absolute text-2xl opacity-50">🛡️</span>
              </div>
         ) : (
              <>
-                <div className="relative z-10 w-full h-full flex items-center justify-center">
+                {/* Regular Monster Visual */}
+                <div className={`relative z-10 w-full h-full flex items-center justify-center ${isFrozen ? 'opacity-80' : ''}`}>
                     {tile.image && !imgError ? (
                         <img 
                             src={tile.image} 
@@ -111,8 +114,16 @@ const Tile: React.FC<TileProps> = React.memo(({ tile, isSelected, isDragging, on
                         <span className="select-none">{tile.emoji}</span>
                     )}
                 </div>
+
+                {/* Ice Frame Overlay - Transparent center to see monster */}
                 {isFrozen && (
-                    <div className="absolute inset-0 rounded-xl z-20 pointer-events-none bg-cyan-400/20 backdrop-blur-[1px] border-2 border-white/40"></div>
+                    <>
+                        <div className="absolute inset-0 z-20 pointer-events-none rounded-xl border-[4px] border-cyan-300/90 shadow-[inset_0_0_15px_rgba(34,211,238,0.6)] bg-blue-400/20 backdrop-brightness-110">
+                             <div className="absolute top-0 right-0 p-0.5 bg-cyan-200/90 rounded-bl-lg text-[10px] shadow-sm">❄️</div>
+                        </div>
+                        {/* Frost Texture overlay */}
+                        <div className="absolute inset-0 z-10 bg-gradient-to-tr from-white/30 via-transparent to-transparent pointer-events-none"></div>
+                    </>
                 )}
              </>
         )}
