@@ -15,7 +15,8 @@ interface TeamSelectorProps {
     onBackToMenu: () => void;
 }
 
-const ITEMS_PER_PAGE = 12; // 3 rows * 4 columns
+// Increased to 16 to maximize rows (4 rows x 4 cols)
+const ITEMS_PER_PAGE = 16; 
 
 const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, onUpdateTeam, onStart, nextLevel, nextEnemy, movesLeft, onBackToMenu }) => {
     // Modal State for Long Press
@@ -196,7 +197,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                     </div>
                 </div>
 
-                {/* Moves Info - REDUCED MARGIN BOTTOM */}
+                {/* Moves Info */}
                 <div className="mb-2 bg-black/40 px-4 py-1.5 rounded-full text-xs text-slate-300 font-mono border border-white/10 shadow-lg">
                     TURNOS DISPONIBLES: <span className="text-white font-bold text-base ml-1">{movesLeft}</span>
                 </div>
@@ -204,7 +205,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 {/* Active Team Slots */}
                 <div className="w-full mb-4">
                     <span className="text-sm font-bold text-white uppercase drop-shadow block mb-2 text-center">Tu Equipo</span>
-                    <div className="flex gap-2 h-24">
+                    <div className="flex gap-2 justify-center">
                         {[0, 1, 2, 3].map(idx => {
                             const member = currentTeam[idx];
                             return (
@@ -213,11 +214,12 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                     data-slot-index={idx}
                                     onDragOver={handleDragOver}
                                     onDrop={(e) => handleDrop(e, idx)}
-                                    className="flex-1 bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner"
+                                    // Added aspect-square and max-w for square squares
+                                    className="flex-1 aspect-square max-w-[5rem] bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner"
                                 >
                                     {member ? (
                                         <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900/40 rounded-xl">
-                                            <div className="w-10 h-10 mb-1 flex items-center justify-center filter drop-shadow-md">
+                                            <div className="w-8 h-8 md:w-10 md:h-10 mb-1 flex items-center justify-center filter drop-shadow-md">
                                                 {member.image && !imgErrors[member.id] ? (
                                                     <img 
                                                         src={member.image} 
@@ -229,7 +231,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                                     <span className="text-3xl">{member.emoji}</span>
                                                 )}
                                             </div>
-                                            <div className="text-[10px] font-bold text-indigo-200 truncate w-full text-center px-1">{member.name}</div>
+                                            <div className="text-[9px] font-bold text-indigo-200 truncate w-full text-center px-1">{member.name}</div>
                                             <div className="absolute -top-1 -right-1 flex items-center justify-center text-lg pointer-events-none filter drop-shadow-md">
                                                 {TYPE_ICONS[member.type]}
                                             </div>
@@ -250,25 +252,25 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                         <span className="text-[10px] text-slate-300 ml-2">({currentPage + 1}/{totalPages || 1})</span>
                     </div>
                     
-                    {/* Navigation Arrows */}
+                    {/* Navigation Arrows - THINNER */}
                     <button 
                         onClick={prevPage}
                         disabled={currentPage === 0}
-                        className={`absolute left-0 top-10 bottom-2 w-10 z-30 rounded-r-xl border-y border-r border-white/20 transition-all flex items-center justify-center ${currentPage === 0 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/40 hover:bg-black/60 active:bg-indigo-600 text-white'}`}
+                        className={`absolute left-0 top-10 bottom-2 w-6 z-30 rounded-r-xl border-y border-r border-white/20 transition-all flex items-center justify-center ${currentPage === 0 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/40 hover:bg-black/60 active:bg-indigo-600 text-white'}`}
                     >
-                        <ChevronLeft size={24} />
+                        <ChevronLeft size={20} />
                     </button>
                     <button 
                         onClick={nextPage}
                         disabled={currentPage >= totalPages - 1}
-                        className={`absolute right-0 top-10 bottom-2 w-10 z-30 rounded-l-xl border-y border-l border-white/20 transition-all flex items-center justify-center ${currentPage >= totalPages - 1 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/40 hover:bg-black/60 active:bg-indigo-600 text-white'}`}
+                        className={`absolute right-0 top-10 bottom-2 w-6 z-30 rounded-l-xl border-y border-l border-white/20 transition-all flex items-center justify-center ${currentPage >= totalPages - 1 ? 'bg-black/20 text-slate-500 cursor-not-allowed' : 'bg-black/40 hover:bg-black/60 active:bg-indigo-600 text-white'}`}
                     >
-                        <ChevronRight size={24} />
+                        <ChevronRight size={20} />
                     </button>
 
-                    {/* GRID DISPLAY */}
-                    <div className="flex-1 p-4 px-12 flex items-center justify-center">
-                        <div className="grid grid-cols-4 grid-rows-3 gap-2 w-full h-full place-items-center">
+                    {/* GRID DISPLAY - 4 Rows now */}
+                    <div className="flex-1 p-2 px-8 flex items-center justify-center">
+                        <div className="grid grid-cols-4 grid-rows-4 gap-2 w-full h-full place-items-center">
                             {currentMonsters.map(monster => {
                                 const isSelected = currentTeam.find(m => m.id === monster.id);
                                 const bgColor = TYPE_PASTELS[monster.type] || 'bg-slate-800 border-slate-700';
@@ -289,7 +291,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                         onTouchEnd={handleTouchEnd}
                                         
                                         className={`
-                                            w-full aspect-square max-w-[5rem] rounded-xl flex flex-col items-center justify-center border-2 relative cursor-grab active:cursor-grabbing transition-transform select-none flex-shrink-0
+                                            w-full aspect-square max-w-[4.5rem] rounded-xl flex flex-col items-center justify-center border-2 relative cursor-grab active:cursor-grabbing transition-transform select-none flex-shrink-0
                                             ${bgColor}
                                             ${isSelected 
                                                 ? 'opacity-40 grayscale scale-95' 
@@ -297,7 +299,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                             }
                                         `}
                                     >
-                                        <div className="w-8 h-8 md:w-10 md:h-10 mb-0.5 flex items-center justify-center filter drop-shadow-sm pointer-events-none">
+                                        <div className="w-8 h-8 mb-0.5 flex items-center justify-center filter drop-shadow-sm pointer-events-none">
                                             {monster.image && !imgErrors[monster.id] ? (
                                                 <img 
                                                     src={monster.image} 
@@ -306,12 +308,12 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                                     onError={() => handleImageError(monster.id)}
                                                 />
                                             ) : (
-                                                <span className="text-2xl md:text-3xl">{monster.emoji}</span>
+                                                <span className="text-2xl">{monster.emoji}</span>
                                             )}
                                         </div>
-                                        <div className="text-[8px] font-bold text-slate-800 truncate w-full text-center bg-white/50 rounded px-1 pointer-events-none mx-1">{monster.name}</div>
+                                        <div className="text-[7px] font-bold text-slate-800 truncate w-full text-center bg-white/50 rounded px-1 pointer-events-none mx-1">{monster.name}</div>
                                         {/* Larger Type Icon */}
-                                        <div className="absolute -top-1 -right-1 flex items-center justify-center text-lg pointer-events-none filter drop-shadow-md">
+                                        <div className="absolute -top-1 -right-1 flex items-center justify-center text-sm pointer-events-none filter drop-shadow-md">
                                             {TYPE_ICONS[monster.type]}
                                         </div>
                                     </div>

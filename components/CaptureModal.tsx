@@ -95,8 +95,8 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                     {phase !== 'result' && (
                          <div className={`
                             w-48 h-48 transition-all duration-500 filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] flex items-center justify-center 
-                            ${phase === 'idle' ? 'animate-bounce' : ''}
-                            ${phase === 'scanning' ? 'animate-scan-tremble' : ''}
+                            ${phase === 'idle' ? 'animate-wobble-slow' : ''}
+                            ${phase === 'scanning' ? 'animate-scan-tremble animate-fade-blink' : ''}
                             ${phase === 'absorbing' ? 'animate-struggle' : ''}
                          `}>
                              {boss.image && !imgError ? (
@@ -233,6 +233,24 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
             </div>
 
             <style>{`
+                @keyframes wobble-slow {
+                    0%, 100% { transform: rotate(0deg); }
+                    25% { transform: rotate(-3deg); }
+                    75% { transform: rotate(3deg); }
+                }
+                .animate-wobble-slow {
+                    animation: wobble-slow 2s ease-in-out infinite;
+                }
+
+                @keyframes fade-blink {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.1; } /* More transparent */
+                }
+                .animate-fade-blink {
+                    animation: fade-blink 1s ease-in-out infinite;
+                }
+
+                /* ... existing keyframes ... */
                 @keyframes beam-pulse {
                     0%, 100% { opacity: 0.8; height: 150vh; }
                     50% { opacity: 0.6; height: 155vh; }
@@ -275,34 +293,24 @@ const CaptureModal: React.FC<CaptureModalProps> = ({ boss, chance, onCaptureEnd 
                     animation: zoom-stamp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
                 }
                 
-                /* SIMPLIFIED DROOP ANIMATION - REDUCED TILT */
                 @keyframes droop {
                     0% { transform: rotate(0deg) scale(0.8); opacity: 0; }
                     20% { transform: rotate(0deg) scale(1); opacity: 1; }
-                    40% { transform: rotate(0deg); } /* Hold steady */
-                    100% { transform: rotate(10deg) translateY(20px); opacity: 1; } /* Reduced drop and tilt by half */
+                    40% { transform: rotate(0deg); }
+                    100% { transform: rotate(10deg) translateY(20px); opacity: 1; }
                 }
                 .animate-droop {
                     animation: droop 1.5s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
                 }
 
-                @keyframes shake-device {
-                    0%, 100% { transform: translateX(0); }
-                    25% { transform: translateX(-2px); }
-                    75% { transform: translateX(2px); }
-                }
-                .animate-shake-device {
-                    animation: shake-device 0.1s linear infinite;
-                }
-
                 @keyframes scan-tremble {
-                    0%, 100% { opacity: 1; transform: translateX(0); }
-                    25% { opacity: 0.6; transform: translateX(-2px); }
-                    50% { opacity: 1; transform: translateX(0); }
-                    75% { opacity: 0.6; transform: translateX(2px); }
+                    0%, 100% { transform: translateX(0); }
+                    25% { transform: translateX(-3px); }
+                    50% { transform: translateX(0); }
+                    75% { transform: translateX(3px); }
                 }
                 .animate-scan-tremble {
-                    animation: scan-tremble 0.1s linear infinite;
+                    animation: scan-tremble 0.05s linear infinite;
                 }
 
                 @keyframes struggle {

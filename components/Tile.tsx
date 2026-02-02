@@ -36,10 +36,9 @@ const Tile: React.FC<TileProps> = React.memo(({ tile, isSelected, isDragging, on
     <motion.div
       onPointerDown={(e) => isInteractive && onPointerDown(e, tile.id)}
       
-      // Initial state
+      // Zoom-in Spawn Animation
       initial={tile.id.startsWith('spawn') ? { 
-          x: `${tile.x * 100}%`, 
-          y: '-150%', 
+          scale: 0,
           opacity: 0 
       } : false}
       

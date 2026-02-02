@@ -1,22 +1,21 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { TileData, GRID_WIDTH, GRID_HEIGHT, FloatingText, ProjectileData } from '../types';
+import { TileData, GRID_WIDTH, GRID_HEIGHT } from '../types';
 
 interface BoardProps {
   board: TileData[];
   selectedTileId: string | null;
   onMove: (id: string, x: number, y: number) => void;
   isProcessing: boolean;
-  floatingTexts: FloatingText[];
   shake?: boolean;
-  projectiles?: ProjectileData[];
+  isFrozen?: boolean; // New prop to stop physics
 }
 
 // Visual State for a tile in the animation loop
 interface VisualTile {
     x: number; 
     y: number; 
-    scaleX: number; // For squash effect
-    scaleY: number; // For squash effect
+    scaleX: number; // For squash effect & zoom on spawn
+    scaleY: number; // For squash effect & zoom on spawn
     opacity: number;
     rotation: number;
     squashTime: number; // Timestamp when impact started
@@ -51,7 +50,7 @@ const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w:
     ctx.arcTo(x, y, x + w, y, r);
 };
 
-const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessing, floatingTexts, shake, projectiles = [] }) => {
+const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessing, shake, isFrozen = false }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -65,9 +64,6 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
       const currentAnim = animState.current;
       const newAnim: Record<string, VisualTile> = {};
       
-      // Helper to stack new spawns
-      const colSpawnCounts: number[] = Array(GRID_WIDTH).fill(0);
-
       board.forEach(tile => {
           if (currentAnim[tile.id]) {
               // Existing tile
@@ -75,22 +71,34 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   ...currentAnim[tile.id],
               };
           } else {
-              // New tile (Spawn)
-              const col = tile.x;
-              const stackIndex = colSpawnCounts[col];
-              colSpawnCounts[col]++;
-
-              // INCREASED GAP: 1.6 spacing to prevent visual overlapping during fall
-              newAnim[tile.id] = {
-                  x: tile.x,
-                  y: -2.0 - (stackIndex * 1.6), 
-                  scaleX: 1,
-                  scaleY: 1,
-                  opacity: 1,
-                  rotation: 0,
-                  squashTime: 0,
-                  isSquashing: false
-              };
+              // New tile logic
+              const isSpawn = tile.id.includes('spawn') || tile.id.includes('init');
+              
+              if (isSpawn) {
+                  // SPAWN: Start at target position but scale 0 (ZOOM IN)
+                  newAnim[tile.id] = {
+                      x: tile.x,
+                      y: tile.y, 
+                      scaleX: 0, 
+                      scaleY: 0,
+                      opacity: 1,
+                      rotation: 0,
+                      squashTime: 0,
+                      isSquashing: false
+                  };
+              } else {
+                 // FALLBACK (shouldn't really happen for non-spawns unless explicit fall logic needed)
+                  newAnim[tile.id] = {
+                      x: tile.x,
+                      y: tile.y - 1,
+                      scaleX: 1,
+                      scaleY: 1,
+                      opacity: 1,
+                      rotation: 0,
+                      squashTime: 0,
+                      isSquashing: false
+                  };
+              }
           }
           
           if (tile.image && !imageCache.current[tile.image]) {
@@ -345,7 +353,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               const isDragging = dragState?.id === tile.id;
 
               // PHYSICS
-              if (!isDragging) {
+              if (!isDragging && !isFrozen) {
                   // Y Movement
                   const diffY = tile.y - visual.y;
                   if (Math.abs(diffY) <= speed) {
@@ -368,7 +376,14 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   else visual.x += Math.sign(diffX) * speed;
 
                   // Animation Tweens
-                  if (visual.isSquashing) {
+                  // ZOOM IN SPAWN EFFECT
+                  if (visual.scaleX < 1 && !tile.isMatched) {
+                      visual.scaleX += 0.1;
+                      visual.scaleY += 0.1;
+                      if (visual.scaleX > 1) { visual.scaleX = 1; visual.scaleY = 1; }
+                  }
+                  // SQUASH EFFECT
+                  else if (visual.isSquashing) {
                       const elapsed = now - visual.squashTime;
                       const duration = 200; 
                       if (elapsed < duration) {
@@ -405,10 +420,8 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
 
               // RENDER LOGIC
               if (isDragging) {
-                  // Save for later (Draw on top)
                   draggedTileData = { tile, visual };
               } else {
-                  // Draw Immediately
                   drawTile(tile, visual, false);
               }
           });
@@ -418,75 +431,16 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               drawTile(draggedTileData.tile, draggedTileData.visual, true);
           }
 
-          // 3. Projectiles
-          const projTime = Date.now();
-          projectiles.forEach(p => {
-               let progress = (projTime - p.startTime) / 500;
-               if (progress > 1) progress = 1;
-               
-               const pRect = containerRef.current!.getBoundingClientRect();
-               const sx = (p.startX + 0.5) * (pRect.width / GRID_WIDTH);
-               const sy = (p.startY + 0.5) * (pRect.height / GRID_HEIGHT);
-
-               const tx = p.targetX - pRect.left;
-               const ty = p.targetY - pRect.top;
-
-               const midX = (sx + tx) / 2;
-               const midY = (sy + ty) / 2;
-               const curveHash = p.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-               const curveOffset = (curveHash % 2 === 0 ? 1 : -1) * 100;
-               const cx = midX + curveOffset;
-               const cy = midY;
-
-               const t = progress;
-               const invT = 1 - t;
-               const x = (invT * invT * sx) + (2 * invT * t * cx) + (t * t * tx);
-               const y = (invT * invT * sy) + (2 * invT * t * cy) + (t * t * ty);
-
-               ctx.save();
-               ctx.translate(x, y);
-               ctx.rotate(progress * Math.PI * 4);
-               ctx.fillStyle = p.color;
-               ctx.shadowColor = p.color;
-               ctx.shadowBlur = 10;
-               ctx.beginPath();
-               ctx.arc(0, 0, 10, 0, Math.PI * 2);
-               ctx.fill();
-               ctx.fillStyle = 'rgba(255,255,255,0.8)';
-               ctx.beginPath();
-               ctx.arc(0, 0, 5, 0, Math.PI * 2);
-               ctx.fill();
-               ctx.restore();
-          });
-
-          // 4. Floating Text
-          floatingTexts.forEach(ft => {
-             const fx = (ft.x + 0.5) * pSize;
-             const fy = (ft.y + 0.5) * (rect.height / GRID_HEIGHT);
-             
-             ctx.save();
-             ctx.translate(fx, fy - 20);
-             ctx.fillStyle = ft.color;
-             ctx.strokeStyle = '#000';
-             ctx.lineWidth = 4;
-             ctx.font = '900 32px "Fredoka", Arial';
-             ctx.textAlign = 'center';
-             ctx.lineJoin = 'round';
-             ctx.strokeText(ft.text, 0, 0);
-             ctx.fillText(ft.text, 0, 0);
-             ctx.restore();
-          });
-
           animationFrameId = requestAnimationFrame(render);
       };
 
       render();
       return () => cancelAnimationFrame(animationFrameId);
-  }, [board, selectedTileId, dragState, shake, projectiles, floatingTexts]);
+  }, [board, selectedTileId, dragState, shake, isFrozen]);
 
   // Input Handling
   const handlePointerDown = (e: React.PointerEvent) => {
-      if (isProcessing || !containerRef.current) return;
+      if (isProcessing || isFrozen || !containerRef.current) return;
       e.preventDefault();
       
       const rect = containerRef.current.getBoundingClientRect();

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Boss } from '../types';
-import { Play, Trophy, Book, Skull } from 'lucide-react';
+import { Play, Skull, Book } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 import { MONSTER_DB } from '../constants';
 
@@ -12,9 +12,7 @@ interface MainMenuProps {
 }
 
 const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, collectionSize, onStartFinalBoss }) => {
-    // Check if player has all regular monsters (DB length minus the secret boss if it's in there, 
-    // but secret boss is not in main DB usually or checked differently)
-    // Assuming MONSTER_DB contains the 30 base monsters.
+    // Check if player has all regular monsters
     const isComplete = collectionSize >= MONSTER_DB.length;
 
     return (
@@ -26,7 +24,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, colle
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-indigo-500/10 rounded-full blur-[120px]"></div>
 
             <h1 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-300 via-orange-400 to-red-500 mb-12 filter drop-shadow-[0_0_20px_rgba(234,179,8,0.5)] leading-tight relative z-10">
-                MONSTEMOJIS<br/>SHUFFLERIANOS
+                MONSTEMOJIS
             </h1>
 
             <div className="flex flex-col gap-4 w-full max-w-xs relative z-10">

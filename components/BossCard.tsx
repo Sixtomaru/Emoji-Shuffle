@@ -64,7 +64,7 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
         )}
         
         {damageTaken && (
-           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-5xl font-black text-red-500 damage-float pointer-events-none z-50 drop-shadow-[0_2px_0_white]">
+           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-5xl font-black font-sans text-red-500 damage-float pointer-events-none z-50 drop-shadow-[0_2px_0_white]">
              -{damageTaken}
            </div>
         )}

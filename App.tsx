@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Board from './components/Board';
 import BossCard from './components/BossCard';
-// AttackProjectile component is no longer used directly in DOM
+import AttackProjectile from './components/Beam';
 import TeamSelector from './components/TeamSelector';
 import MainMenu from './components/MainMenu';
 import CaptureModal from './components/CaptureModal';
@@ -276,6 +276,7 @@ const App: React.FC = () => {
                    addFloatingText(centerTile.x, centerTile.y, `${dmg}`, colorMap[attacker.type] || 'white');
 
                    // FIRE PROJECTILE BURST (Curved balls)
+                   // Ensures they fire visually from match center to boss
                    const projectileCount = 5;
                    for(let i=0; i<projectileCount; i++) {
                        setTimeout(() => {
@@ -312,15 +313,15 @@ const App: React.FC = () => {
                  setComboCount(combo);
                  soundManager.playMatch(combo);
                  
-                 // REDUCED DELAY: 180ms for faster stagger
+                 // MINIMAL DELAY: 100ms
                  if (groupsToProcess.length > 1) {
-                     await new Promise(r => setTimeout(r, 170));
+                     await new Promise(r => setTimeout(r, 100));
                  }
              }
           }
 
-          // 4. Animation Wait
-          await new Promise(r => setTimeout(r, 200));
+          // 4. Animation Wait (Minimal for disappearing)
+          await new Promise(r => setTimeout(r, 100)); // REDUCED from 150
 
           // 5. Apply Gravity
           // Update local board state with unfreezes so gravity handles them correctly (as solid blocks, not empty)
@@ -334,8 +335,8 @@ const App: React.FC = () => {
           currentBoard = boardAfterFall;
 
           // 6. Dynamic Wait for next phase
-          // INCREASED WAIT: 600ms - To allow floaty physics (stiffness 50) to settle before checking new matches
-          await new Promise(r => setTimeout(r, 600));
+          // REDUCED WAIT: 250ms (was 300ms) to make it feel responsive per column
+          await new Promise(r => setTimeout(r, 250));
       }
 
       // --- END OF COMBINATION SEQUENCE ---
@@ -389,10 +390,10 @@ const App: React.FC = () => {
           if (steelToRemove.length > 0) {
                // Show visual update
                setBoard(steelDecayed);
-               await new Promise(r => setTimeout(r, 300));
+               await new Promise(r => setTimeout(r, 200));
                nextBoard = applyGravity(steelDecayed, steelToRemove, team);
                setBoard(nextBoard);
-               await new Promise(r => setTimeout(r, 300));
+               await new Promise(r => setTimeout(r, 200));
                changed = true;
           } else if (changed) {
                setBoard(steelDecayed); // Just update numbers
@@ -478,7 +479,7 @@ const App: React.FC = () => {
         setBoard(tempBoard);
         setIsProcessing(true); 
 
-        await new Promise(r => setTimeout(r, 250));
+        await new Promise(r => setTimeout(r, 200));
         
         // FIX: Start Combo at 0, so the first match counts as 1
         await processMatches(tempBoard, 0, id);
@@ -609,19 +610,19 @@ const App: React.FC = () => {
          
          if (physicsTriggered) {
              // Wait small delay for visual effect
-             await new Promise(r => setTimeout(r, 300));
+             await new Promise(r => setTimeout(r, 200));
              
              // If we have tiles to remove (Rock, Steel, Random, Self), we treat them as "matched" for gravity
              // We need to pass the IDs to remove to applyGravity
              if (tilesToRemove.length > 0) {
                  // Mark them matched visually first?
                  setBoard(prev => prev.map(t => tilesToRemove.includes(t.id) ? { ...t, isMatched: true } : t));
-                 await new Promise(r => setTimeout(r, 200));
+                 await new Promise(r => setTimeout(r, 150));
 
                  const boardAfterFall = applyGravity(newBoard, tilesToRemove, team);
                  setBoard(boardAfterFall);
                  // Now process matches on the new board
-                 await new Promise(r => setTimeout(r, 300));
+                 await new Promise(r => setTimeout(r, 200));
                  await processMatches(boardAfterFall, 1);
              } else {
                  // Only conversions or ice melting happened, check matches directly on newBoard
@@ -693,6 +694,48 @@ const App: React.FC = () => {
             onStartFinalBoss={handleStartFinalBoss}
           />
       )}
+      
+      {/* --- GLOBAL OVERLAY LAYER (For Projectiles & Floating Text) --- */}
+      <div className="absolute inset-0 pointer-events-none z-[60] overflow-visible">
+          {projectiles.map(p => (
+              <AttackProjectile 
+                key={p.id}
+                startX={p.startX}
+                startY={p.startY}
+                targetX={p.targetX}
+                targetY={p.targetY}
+                color={p.color}
+              />
+          ))}
+          
+          {floatingTexts.map(ft => {
+              // Calculate screen position from grid coords if needed, or pass screen coords.
+              // Logic in addFloatingText passes grid coords. Need to convert.
+              // IMPORTANT: logic uses grid coords. Board ref needed.
+              let left = 0, top = 0;
+              if (boardRef.current) {
+                  const rect = boardRef.current.getBoundingClientRect();
+                  left = rect.left + (ft.x + 0.5) * (rect.width / 6);
+                  top = rect.top + (ft.y + 0.5) * (rect.height / 6);
+              }
+              
+              return (
+                  <div 
+                      key={ft.id}
+                      className="absolute font-black text-3xl md:text-4xl damage-float text-shadow-heavy font-sans"
+                      style={{
+                          left: left,
+                          top: top,
+                          transform: 'translate(-50%, -50%)',
+                          color: ft.color,
+                          textShadow: '0 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
+                      }}
+                  >
+                      {ft.text}
+                  </div>
+              );
+          })}
+      </div>
 
       {/* ... (Gallery and TeamSelect remain same, code elided for brevity if not changed, but must include full file in update) ... */}
       
@@ -899,9 +942,8 @@ const App: React.FC = () => {
                             selectedTileId={selectedTileId} 
                             onMove={handleMove} 
                             isProcessing={isProcessing} 
-                            floatingTexts={floatingTexts} 
                             shake={boardShake}
-                            projectiles={projectiles}
+                            isFrozen={showFinishMessage}
                         />
                     </div>
                 </div>
@@ -947,8 +989,6 @@ const App: React.FC = () => {
               <button onClick={() => { soundManager.playButton(); setAppState('menu'); }} className="bg-slate-700 text-white px-8 py-4 rounded-xl font-bold flex gap-2"><RotateCcw /> Volver al Menú</button>
           </div>
       )}
-      
-      {/* AttackProjectiles are now handled inside Board canvas for performance */}
     </div>
   );
 };
