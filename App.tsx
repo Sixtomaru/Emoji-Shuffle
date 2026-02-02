@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Board from './components/Board';
 import BossCard from './components/BossCard';
-import AttackProjectile from './components/Beam';
+// AttackProjectile component is no longer used directly in DOM
 import TeamSelector from './components/TeamSelector';
 import MainMenu from './components/MainMenu';
 import CaptureModal from './components/CaptureModal';
-import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_WIDTH, GRID_HEIGHT } from './types';
+import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_WIDTH, GRID_HEIGHT, ProjectileData } from './types';
 import { createBoard, findMatches, applyGravity, applyInterference, MatchGroup, hasPossibleMoves } from './utils/gameLogic';
 import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS, TYPE_PROJECTILE_ICONS } from './constants';
 import { soundManager } from './utils/sound';
@@ -671,8 +671,10 @@ const App: React.FC = () => {
           const targetY = window.innerHeight * 0.22; 
           
           const id = Date.now() + Math.random().toString();
-          setProjectiles(prev => [...prev, { id, startX, startY, targetX, targetY, color, icon }]);
-          setTimeout(() => setProjectiles(prev => prev.filter(p => p.id !== id)), 500); // Shorter lifetime
+          setProjectiles(prev => [...prev, { id, startX, startY, targetX, targetY, color, icon, startTime: Date.now() }]);
+          
+          // Cleanup is now handled by the Board canvas logic or self-expiry
+          setTimeout(() => setProjectiles(prev => prev.filter(p => p.id !== id)), 500); 
       }
   };
 
@@ -899,6 +901,7 @@ const App: React.FC = () => {
                             isProcessing={isProcessing} 
                             floatingTexts={floatingTexts} 
                             shake={boardShake}
+                            projectiles={projectiles}
                         />
                     </div>
                 </div>
@@ -944,20 +947,10 @@ const App: React.FC = () => {
               <button onClick={() => { soundManager.playButton(); setAppState('menu'); }} className="bg-slate-700 text-white px-8 py-4 rounded-xl font-bold flex gap-2"><RotateCcw /> Volver al Menú</button>
           </div>
       )}
-
-      {projectiles.map(p => <AttackProjectile key={p.id} {...p} />)}
+      
+      {/* AttackProjectiles are now handled inside Board canvas for performance */}
     </div>
   );
 };
-
-interface ProjectileData {
-    id: string;
-    startX: number;
-    startY: number;
-    targetX: number;
-    targetY: number;
-    color: string;
-    icon?: string;
-}
 
 export default App;
