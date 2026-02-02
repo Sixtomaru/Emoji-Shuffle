@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const [comboCount, setComboCount] = useState(0);
   const [skillCharges, setSkillCharges] = useState<Record<string, number>>({});
   const [showSkillMenu, setShowSkillMenu] = useState(false);
+  const [activeSkillMessage, setActiveSkillMessage] = useState<string | null>(null); // New Skill Overlay State
   const [victoryAnim, setVictoryAnim] = useState(false);
   const [isDefeatedAnim, setIsDefeatedAnim] = useState(false); 
   
@@ -206,9 +207,16 @@ const App: React.FC = () => {
       let combo = startCombo;
       // We operate on a local copy of HP so we don't need to wait for state updates to check logic
       let currentBossHp = enemy.currentHp; 
-      let hasWon = currentBossHp <= 0;
+      
+      // Removed local hasWon to allow combo continuation. We check win condition at the end of loop.
 
       while (true) {
+          // --- LOGIC FREEZE IF FINISH MESSAGE IS SHOWING ---
+          // This allows "¡YA ESTÁ!" to pause the board, then resume the combo when it disappears.
+          while (showFinishMessage) {
+              await new Promise(r => setTimeout(r, 200));
+          }
+
           const { groups } = findMatches(currentBoard);
           if (groups.length === 0) break;
 
@@ -263,11 +271,27 @@ const App: React.FC = () => {
              // --- Apply Damage/Score Logic ---
              if (attacker) {
                    setSkillCharges(prev => ({ ...prev, [attacker.id]: Math.min(attacker.skillCost, (prev[attacker.id] || 0) + size) }));
-                   let dmg = 100 * size;
-                   if (size >= 4) dmg *= 1.2;
-                   if (size >= 5) dmg *= 1.5;
-                   if (TYPE_CHART[attacker.type].includes(enemy.type)) dmg *= 1.5;
-                   dmg = Math.floor(dmg * (1 + (combo * 0.2)));
+                   
+                   // --- UPDATED DAMAGE FORMULA ---
+                   const baseAttack = 100;
+                   // Base damage is 100 for the match (3 tiles).
+                   // Extra tiles add 50% damage each.
+                   let dmg = baseAttack * (1 + (size - 3) * 0.5);
+                   
+                   // Type Advantage
+                   if (TYPE_CHART[attacker.type].includes(enemy.type)) {
+                       dmg *= 1.5;
+                   }
+                   
+                   // Combo Multipliers (Stacking? Prompt says "if combo > 8 ... if combo > 20". Usually implies exclusive tiers or stacking. We will use exclusive tiers as typical game logic)
+                   // "When alignments exceed combo 8, attack multiplied by 1.5... if exceeds 20, multiplied by 2"
+                   if (combo > 20) {
+                       dmg *= 2;
+                   } else if (combo > 8) {
+                       dmg *= 1.5;
+                   }
+                   
+                   dmg = Math.floor(dmg);
                    
                    const colorMap: Record<string, string> = { 'Fuego': '#ef4444', 'Agua': '#3b82f6', 'Planta': '#22c55e', 'Eléctrico': '#eab308' };
                    const centerTile = group.center; 
@@ -296,7 +320,10 @@ const App: React.FC = () => {
                         if (wasAlive && currentBossHp <= 0) {
                            setShowFinishMessage(true);
                            soundManager.playWin(); // SURPRISE CHIME
-                           hasWon = true; // Local variable update for outer loop break
+                           // Auto-hide the message after 2 seconds to allow the combo to "continue" visually if there are remaining matches
+                           setTimeout(() => {
+                               setShowFinishMessage(false);
+                           }, 2000);
                         }
                    }, 500 + (projectileCount * 40)); 
              }
@@ -335,23 +362,23 @@ const App: React.FC = () => {
           currentBoard = boardAfterFall;
 
           // 6. Dynamic Wait for next phase
-          // REDUCED WAIT: 250ms (was 300ms) to make it feel responsive per column
-          await new Promise(r => setTimeout(r, 250));
+          // INCREASED WAIT to 600ms to allow slower falling tiles (0.08 speed) to land before next processing
+          await new Promise(r => setTimeout(r, 600));
       }
 
       // --- END OF COMBINATION SEQUENCE ---
       // Wait for any pending damage timeouts (max 600ms) to resolve before deciding outcome
       await new Promise(r => setTimeout(r, 700));
 
-      // Re-check Enemy HP from State or use local tracker logic
-      // Since setTimeout is async, we need to rely on the fact that if we won, hasWon was set or enemy state will update.
-      // However, inside this closure, enemy.currentHp is stale. 
-      // But we updated `hasWon` locally inside the loop if we detected a kill.
-      // Let's use the visual state for the final check to be safe.
-      
-      if (hasWon) {
-          await new Promise(r => setTimeout(r, 1500));
-          setShowFinishMessage(false);
+      // Final Win Check
+      // We check if the boss is dead AND no more matches are happening.
+      if (currentBossHp <= 0) {
+          // If the message is still showing, wait for it.
+          while (showFinishMessage) {
+              await new Promise(r => setTimeout(r, 200));
+          }
+          
+          await new Promise(r => setTimeout(r, 500));
           setIsDefeatedAnim(true);
           await new Promise(r => setTimeout(r, 1500));
           
@@ -433,7 +460,7 @@ const App: React.FC = () => {
                }
           }, 500);
 
-          if (movesLeft <= 0 && !hasWon) {
+          if (movesLeft <= 0) {
               setAppState('gameover');
               soundManager.playLose();
           }
@@ -497,6 +524,10 @@ const App: React.FC = () => {
      setShowSkillMenu(false);
      setSkillCharges(prev => ({...prev, [monster.id]: 0}));
      setIsProcessing(true);
+
+     // --- SKILL VISUALIZATION OVERLAY ---
+     setActiveSkillMessage(`${monster.name} usó ${monster.skillName}`);
+     setTimeout(() => setActiveSkillMessage(null), 2000);
 
      soundManager.playBeam();
      
@@ -638,10 +669,14 @@ const App: React.FC = () => {
             setShowFinishMessage(true);
             soundManager.playWin(); // SURPRISE CHIME
             
-            await new Promise(r => setTimeout(r, 2000));
-            setShowFinishMessage(false);
+            // Auto hide to continue animation flow
+            setTimeout(() => setShowFinishMessage(false), 2000);
             
+            // Wait for message to clear loop in processMatches if it was running, 
+            // but here we are in skill execution which is separate.
+            // We manually trigger end sequence.
             await new Promise(r => setTimeout(r, 2000));
+            
             setIsDefeatedAnim(true);
             await new Promise(r => setTimeout(r, 1500));
 
@@ -735,6 +770,15 @@ const App: React.FC = () => {
                   </div>
               );
           })}
+          
+          {/* Skill Usage Overlay - Semi-transparent Message */}
+          {activeSkillMessage && (
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/60 px-8 py-6 rounded-2xl backdrop-blur-md border border-white/20 animate-in zoom-in duration-300 shadow-2xl">
+                  <span className="text-white font-black text-2xl md:text-3xl text-center whitespace-nowrap drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
+                      {activeSkillMessage}
+                  </span>
+              </div>
+          )}
       </div>
 
       {/* ... (Gallery and TeamSelect remain same, code elided for brevity if not changed, but must include full file in update) ... */}

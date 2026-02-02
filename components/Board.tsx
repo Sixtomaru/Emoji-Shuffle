@@ -165,7 +165,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
           }
 
           // 2. Tiles
-          const speed = 0.35; 
+          const speed = 0.08; // Even slower falling speed
           const now = Date.now();
           
           // Helper Function to Draw a Tile
