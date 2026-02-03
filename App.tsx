@@ -60,6 +60,15 @@ const App: React.FC = () => {
 
   const bossRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  
+  // Logic Refs to avoid closure staleness during async cycles
+  const comboRef = useRef(0);
+  const boardRefState = useRef<TileData[]>([]); 
+  const isEvaluatorBusyRef = useRef(false); // CRITICAL: Semáforo para evitar bucles infinitos
+
+  useEffect(() => {
+      boardRefState.current = board;
+  }, [board]);
 
   const enterFullscreen = () => {
       try {
@@ -159,6 +168,8 @@ const App: React.FC = () => {
       setShowFinishMessage(false);
       setImgError(false);
       setIsResettingBoard(false);
+      comboRef.current = 0;
+      isEvaluatorBusyRef.current = false; // Reset lock
   };
 
   const handleCaptureResult = (caught: boolean) => {
@@ -196,276 +207,244 @@ const App: React.FC = () => {
       if (amount <= 0) return;
       setLastDamage(amount);
       setBossShake(true);
-      setHitEffect(true); // Trigger visual hit
+      setHitEffect(true); 
       setTimeout(() => { setBossShake(false); setLastDamage(null); setHitEffect(false); }, 200);
-      setEnemy(prev => ({ ...prev, currentHp: Math.max(0, prev.currentHp - amount) }));
+      setEnemy(prev => {
+          const newHp = Math.max(0, prev.currentHp - amount);
+          return { ...prev, currentHp: newHp };
+      });
   };
 
-  // --- LOGIC: INTELLIGENT BATCH PROCESSING (Staggered) ---
-  const processMatches = async (startBoard: TileData[], startCombo: number, priorityTileId: string | null = null) => {
-      let currentBoard = startBoard;
-      let combo = startCombo;
-      // We operate on a local copy of HP so we don't need to wait for state updates to check logic
-      let currentBossHp = enemy.currentHp; 
-      
-      // Removed local hasWon to allow combo continuation. We check win condition at the end of loop.
+  // --- EVENT DRIVEN LOGIC CYCLE ---
+  
+  // This function checks the state of the board ONLY when triggered.
+  // Triggered by: User Move OR Board Physics Settle
+  const evaluateBoardState = async () => {
+      // LOCK CHECK: If we are already running logic (waiting for matches to show), ignore new settlement events.
+      if (isEvaluatorBusyRef.current) return;
+      isEvaluatorBusyRef.current = true;
 
-      while (true) {
-          // --- LOGIC FREEZE IF FINISH MESSAGE IS SHOWING ---
-          // This allows "¡YA ESTÁ!" to pause the board, then resume the combo when it disappears.
-          while (showFinishMessage) {
-              await new Promise(r => setTimeout(r, 200));
-          }
-
+      try {
+          // Use ref to get latest without dependency issues in callback
+          const currentBoard = boardRefState.current;
           const { groups } = findMatches(currentBoard);
-          if (groups.length === 0) break;
-
-          // 1. Identify Intersections
-          const tileCounts = new Map<string, number>();
-          groups.forEach(g => g.ids.forEach(id => tileCounts.set(id, (tileCounts.get(id) || 0) + 1)));
           
-          const intersectionIds = new Set<string>();
-          tileCounts.forEach((count, id) => {
-              if (count > 1) intersectionIds.add(id);
-          });
+          // -- CASE 1: MATCHES FOUND --
+          if (groups.length > 0) {
+              // Identify intersecting
+              const tileCounts = new Map<string, number>();
+              groups.forEach(g => g.ids.forEach(id => tileCounts.set(id, (tileCounts.get(id) || 0) + 1)));
+              const intersectionIds = new Set<string>();
+              tileCounts.forEach((count, id) => { if (count > 1) intersectionIds.add(id); });
 
-          // 2. Selection & Priority Logic
-          // UPDATED: Priority to Intersecting groups (Cross/L/T).
-          let groupsToProcess = [...groups].sort((a, b) => {
-              const aHasIntersect = a.ids.some(id => intersectionIds.has(id));
-              const bHasIntersect = b.ids.some(id => intersectionIds.has(id));
-              // Intersections come first
-              if (aHasIntersect && !bHasIntersect) return -1;
-              if (!aHasIntersect && bHasIntersect) return 1;
-              return 0;
-          });
+              const groupsToProcess = [...groups].sort((a, b) => {
+                  const aHasIntersect = a.ids.some(id => intersectionIds.has(id));
+                  const bHasIntersect = b.ids.some(id => intersectionIds.has(id));
+                  if (aHasIntersect && !bHasIntersect) return -1;
+                  if (!aHasIntersect && bHasIntersect) return 1;
+                  return 0;
+              });
 
-          // 3. Process the selected groups (SEQUENTIAL STAGGERING)
-          const allIdsForGravity = new Set<string>();
-          const allIdsToUnfreeze = new Set<string>();
+              const allIdsForGravity = new Set<string>();
+              const allIdsToUnfreeze = new Set<string>();
+              // Track IDs already processed in this batch to accumulatively update the board visual state
+              const accumulatedMatchedIds = new Set<string>(); 
 
-          for (const group of groupsToProcess) {
-             const attacker = team.find(m => m.id === group.type);
-             const size = group.ids.length; 
-             
-             // Determine IDs for this specific group
-             const groupVisualIds = new Set<string>();
-             const groupUnfreezeIds = new Set<string>();
+              let localCombo = comboRef.current;
 
-             group.ids.forEach(id => {
-                 const tile = currentBoard.find(t => t.id === id);
-                 if (tile?.status === 'ice') {
-                     groupUnfreezeIds.add(id);
-                     allIdsToUnfreeze.add(id);
-                 } else {
-                     groupVisualIds.add(id);
-                     allIdsForGravity.add(id);
-                 }
-             });
-             
-             group.idsToDestroy?.forEach(id => {
-                 groupVisualIds.add(id);
-                 allIdsForGravity.add(id);
-             });
+              // Process logic for matches SEQUENTIALLY VISUALLY
+              for (const group of groupsToProcess) {
+                const attacker = team.find(m => m.id === group.type);
+                const size = group.ids.length; 
+                
+                // Collect IDs for final gravity calculation
+                group.ids.forEach(id => {
+                    const tile = currentBoard.find(t => t.id === id);
+                    if (tile?.status === 'ice') {
+                        allIdsToUnfreeze.add(id);
+                    } else {
+                        allIdsForGravity.add(id);
+                    }
+                    accumulatedMatchedIds.add(id);
+                });
+                
+                group.idsToDestroy?.forEach(id => {
+                    allIdsForGravity.add(id);
+                    accumulatedMatchedIds.add(id);
+                });
 
-             // --- Apply Damage/Score Logic ---
-             if (attacker) {
-                   setSkillCharges(prev => ({ ...prev, [attacker.id]: Math.min(attacker.skillCost, (prev[attacker.id] || 0) + size) }));
-                   
-                   // --- UPDATED DAMAGE FORMULA ---
-                   const baseAttack = 100;
-                   // Base damage is 100 for the match (3 tiles).
-                   // Extra tiles add 50% damage each.
-                   let dmg = baseAttack * (1 + (size - 3) * 0.5);
-                   
-                   // Type Advantage
-                   if (TYPE_CHART[attacker.type].includes(enemy.type)) {
-                       dmg *= 1.5;
-                   }
-                   
-                   // Combo Multipliers (Stacking? Prompt says "if combo > 8 ... if combo > 20". Usually implies exclusive tiers or stacking. We will use exclusive tiers as typical game logic)
-                   // "When alignments exceed combo 8, attack multiplied by 1.5... if exceeds 20, multiplied by 2"
-                   if (combo > 20) {
-                       dmg *= 2;
-                   } else if (combo > 8) {
-                       dmg *= 1.5;
-                   }
-                   
-                   dmg = Math.floor(dmg);
-                   
-                   const colorMap: Record<string, string> = { 'Fuego': '#ef4444', 'Agua': '#3b82f6', 'Planta': '#22c55e', 'Eléctrico': '#eab308' };
-                   const centerTile = group.center; 
+                if (attacker) {
+                    setSkillCharges(prev => ({ ...prev, [attacker.id]: Math.min(attacker.skillCost, (prev[attacker.id] || 0) + size) }));
+                    const baseAttack = 100;
+                    let dmg = baseAttack * (1 + (size - 3) * 0.5);
+                    if (TYPE_CHART[attacker.type].includes(enemy.type)) dmg *= 1.5;
+                    if (localCombo > 20) dmg *= 2;
+                    else if (localCombo > 8) dmg *= 1.5;
+                    dmg = Math.floor(dmg);
+                    
+                    const colorMap: Record<string, string> = { 'Fuego': '#ef4444', 'Agua': '#3b82f6', 'Planta': '#22c55e', 'Eléctrico': '#eab308' };
+                    const centerTile = group.center; 
+                    addFloatingText(centerTile.x, centerTile.y, `${dmg}`, colorMap[attacker.type] || 'white');
 
-                   // Floating Text appears with Damage at match center IMMEDIATELY
-                   addFloatingText(centerTile.x, centerTile.y, `${dmg}`, colorMap[attacker.type] || 'white');
+                    const projectileCount = 5;
+                    for(let i=0; i<projectileCount; i++) {
+                        setTimeout(() => {
+                                fireProjectile(centerTile.x, centerTile.y, colorMap[attacker.type] || 'white');
+                        }, i * 40);
+                    }
 
-                   // FIRE PROJECTILE BURST (Curved balls)
-                   // Ensures they fire visually from match center to boss
-                   const projectileCount = 5;
-                   for(let i=0; i<projectileCount; i++) {
-                       setTimeout(() => {
-                            fireProjectile(centerTile.x, centerTile.y, colorMap[attacker.type] || 'white');
-                       }, i * 40); // Rapid fire sequence
-                   }
+                    setTimeout(() => {
+                            if (dmg > 0) applyDamage(dmg);
+                    }, 500 + (projectileCount * 40)); 
+                }
+                
+                localCombo++;
+                comboRef.current = localCombo;
+                setComboCount(localCombo);
+                soundManager.playMatch(localCombo);
+                
+                // VISUAL STEP: Update board to show THIS specific group matching
+                // We use accumulatedMatchedIds so previous matches in this loop stay matched
+                setBoard(prev => prev.map(t => {
+                    if (accumulatedMatchedIds.has(t.id)) return { ...t, isMatched: true };
+                    return t;
+                }));
 
-                   // DELAY DAMAGE UPDATE UNTIL IMPACT (Wait for last projectile)
-                   setTimeout(() => {
-                        const wasAlive = currentBossHp > 0;
-                        if (dmg > 0) {
-                            currentBossHp = Math.max(0, currentBossHp - dmg);
-                            applyDamage(dmg); // Visual HP update + Shake + Hit Effect
-                        }
+                // STAGGER DELAY: Wait between each match pop
+                await new Promise(r => setTimeout(r, 250));
+              }
+              
+              // WAIT: Small pause after all matches shown before gravity kicks in
+              await new Promise(r => setTimeout(r, 200)); 
 
-                        // Check Win Condition at Impact
-                        if (wasAlive && currentBossHp <= 0) {
-                           setShowFinishMessage(true);
-                           soundManager.playWin(); // SURPRISE CHIME
-                           // Auto-hide the message after 2 seconds to allow the combo to "continue" visually if there are remaining matches
-                           setTimeout(() => {
-                               setShowFinishMessage(false);
-                           }, 2000);
-                        }
-                   }, 500 + (projectileCount * 40)); 
-             }
+              // LOGIC: Remove & Gravity
+              const boardWithUnfrozen = currentBoard.map(t => {
+                  if (allIdsToUnfreeze.has(t.id)) return { ...t, status: 'normal' as const, isMatched: false };
+                  return t;
+              });
 
-             // --- STAGGERED VISUAL UPDATE ---
-             if (groupVisualIds.size > 0 || groupUnfreezeIds.size > 0) {
-                 setBoard(prev => prev.map(t => {
-                     if (groupUnfreezeIds.has(t.id)) return { ...t, status: 'normal', isMatched: false };
-                     if (groupVisualIds.has(t.id)) return { ...t, isMatched: true };
-                     return t;
-                 }));
-                 
-                 combo++;
-                 setComboCount(combo);
-                 soundManager.playMatch(combo);
-                 
-                 // MINIMAL DELAY: 100ms
-                 if (groupsToProcess.length > 1) {
-                     await new Promise(r => setTimeout(r, 100));
-                 }
-             }
+              // This triggers board state change -> Board Component detects change -> Animates -> Calls onBoardSettled when done
+              const boardAfterFall = applyGravity(boardWithUnfrozen, Array.from(allIdsForGravity), team);
+              setBoard(boardAfterFall);
+              
+              // EXIT. The lock releases in `finally`, allowing the NEXT onBoardSettled (from gravity) to trigger us again.
+              return;
           }
 
-          // 4. Animation Wait (Minimal for disappearing)
-          await new Promise(r => setTimeout(r, 100)); // REDUCED from 150
-
-          // 5. Apply Gravity
-          // Update local board state with unfreezes so gravity handles them correctly (as solid blocks, not empty)
-          const boardWithUnfrozen = currentBoard.map(t => {
-              if (allIdsToUnfreeze.has(t.id)) return { ...t, status: 'normal' as const, isMatched: false };
-              return t;
-          });
-
-          const boardAfterFall = applyGravity(boardWithUnfrozen, Array.from(allIdsForGravity), team);
-          setBoard(boardAfterFall);
-          currentBoard = boardAfterFall;
-
-          // 6. Dynamic Wait for next phase
-          // INCREASED WAIT to 600ms to allow slower falling tiles (0.08 speed) to land before next processing
-          await new Promise(r => setTimeout(r, 600));
-      }
-
-      // --- END OF COMBINATION SEQUENCE ---
-      // Wait for any pending damage timeouts (max 600ms) to resolve before deciding outcome
-      await new Promise(r => setTimeout(r, 700));
-
-      // Final Win Check
-      // We check if the boss is dead AND no more matches are happening.
-      if (currentBossHp <= 0) {
-          // If the message is still showing, wait for it.
-          while (showFinishMessage) {
-              await new Promise(r => setTimeout(r, 200));
+          // -- CASE 2: NO MATCHES (Stable State) --
+          
+          // Check Win Condition (Delayed check to ensure projectiles hit)
+          if (enemy.currentHp <= 0) {
+              handleVictory();
+              return;
           }
-          
-          await new Promise(r => setTimeout(r, 500));
-          setIsDefeatedAnim(true);
-          await new Promise(r => setTimeout(r, 1500));
-          
-          setIsProcessing(false);
-          setComboCount(0);
-          
-          if (isFinalBossMode) setAppState('victory');
-          else if (collection.some(m => m.name === enemy.name)) advanceLevel();
-          else setAppState('capture');
-      } 
-      else {
-          setTimeout(() => setComboCount(0), 1000);
-          
-          // --- TURN END LOGIC (INTERFERENCE & STEEL) ---
-          
-          let nextBoard = currentBoard;
-          let changed = false;
 
-          // 1. Steel Life Decay
-          const steelDecayed = nextBoard.map(t => {
-              if (t.status === 'steel' && t.statusLife !== undefined) {
-                  const newLife = t.statusLife - 1;
-                  changed = true;
-                  if (newLife <= 0) {
-                      // Destroy steel
-                      return { ...t, isMatched: true }; // Mark for removal
-                  } else {
+          // Turn End Logic (Interference, etc) - Only if we were processing matches
+          if (comboRef.current > 0) {
+              comboRef.current = 0; // Reset combo for next move
+              setTimeout(() => setComboCount(0), 1000);
+              
+              let nextBoard = currentBoard;
+              let changed = false;
+
+              // Steel Decay
+              const steelDecayed = nextBoard.map(t => {
+                  if (t.status === 'steel' && t.statusLife !== undefined) {
+                      const newLife = t.statusLife - 1;
+                      changed = true;
+                      if (newLife <= 0) return { ...t, isMatched: true };
                       return { ...t, statusLife: newLife };
                   }
+                  return t;
+              });
+              
+              const steelToRemove = steelDecayed.filter(t => t.status === 'steel' && t.isMatched).map(t => t.id);
+              
+              if (steelToRemove.length > 0) {
+                  setBoard(steelDecayed);
+                  await new Promise(r => setTimeout(r, 200));
+                  nextBoard = applyGravity(steelDecayed, steelToRemove, team);
+                  setBoard(nextBoard);
+                  // Gravity happened, so we return and wait for settle to re-eval
+                  return; 
+              } else if (changed) {
+                  setBoard(steelDecayed);
+                  nextBoard = steelDecayed;
               }
-              return t;
-          });
 
-          // Handle broken steel removal
-          const steelToRemove = steelDecayed.filter(t => t.status === 'steel' && t.isMatched).map(t => t.id);
-          if (steelToRemove.length > 0) {
-               // Show visual update
-               setBoard(steelDecayed);
-               await new Promise(r => setTimeout(r, 200));
-               nextBoard = applyGravity(steelDecayed, steelToRemove, team);
-               setBoard(nextBoard);
-               await new Promise(r => setTimeout(r, 200));
-               changed = true;
-          } else if (changed) {
-               setBoard(steelDecayed); // Just update numbers
-               nextBoard = steelDecayed;
-          }
-
-          // 2. Interference Trigger
-          setTurnsToInterference(prev => {
-              const next = prev - 1;
-              if (next <= 0) {
-                  // Trigger!
-                  const interferedBoard = applyInterference(nextBoard, enemy.type);
-                  setBoard(interferedBoard);
-                  nextBoard = interferedBoard; // Update reference for deadlock check
-                  soundManager.playThrow(); // Sound effect
-                  setBoardShake(true);
-                  setTimeout(() => setBoardShake(false), 300);
-                  return Math.floor(Math.random() * 4) + 2; // Reset 2-5
+              // Interference
+              let interferenceTriggered = false;
+              setTurnsToInterference(prev => {
+                  const next = prev - 1;
+                  if (next <= 0) {
+                      const interferedBoard = applyInterference(nextBoard, enemy.type);
+                      setBoard(interferedBoard);
+                      soundManager.playThrow();
+                      setBoardShake(true);
+                      setTimeout(() => setBoardShake(false), 300);
+                      interferenceTriggered = true;
+                      return Math.floor(Math.random() * 4) + 2; 
+                  }
+                  return next;
+              });
+              
+              if (interferenceTriggered) {
+                  setIsProcessing(false);
+                  return;
               }
-              return next;
-          });
 
-          // 3. Deadlock Check / Reset
-          // Wait a tick for state to settle visually
-          setTimeout(() => {
-               if (!hasPossibleMoves(nextBoard)) {
-                   // RESET BOARD
-                   setIsResettingBoard(true);
-                   setTimeout(() => {
-                       const freshBoard = createBoard(team);
-                       setBoard(freshBoard);
-                       setIsResettingBoard(false);
-                       setIsProcessing(false);
-                   }, 1000);
-               } else {
-                   setIsProcessing(false);
-               }
-          }, 500);
+              // Deadlock Check
+              if (!hasPossibleMoves(nextBoard)) {
+                  setIsResettingBoard(true);
+                  setTimeout(() => {
+                      setBoard(createBoard(team));
+                      setIsResettingBoard(false);
+                      setIsProcessing(false);
+                  }, 1000);
+              } else {
+                  setIsProcessing(false);
+              }
 
-          if (movesLeft <= 0) {
-              setAppState('gameover');
-              soundManager.playLose();
+              if (movesLeft <= 0 && enemy.currentHp > 0) {
+                  setAppState('gameover');
+                  soundManager.playLose();
+              }
+          } else {
+              // No combo happened, just stable
+              setIsProcessing(false);
           }
+      } catch(e) {
+          console.error("Board Error:", e);
+          setIsProcessing(false);
+      } finally {
+          isEvaluatorBusyRef.current = false;
       }
   };
+
+  // Called by Board component when visual animation finishes
+  const handleBoardSettled = () => {
+      if (isProcessing) {
+          evaluateBoardState();
+      }
+  };
+
+  const handleVictory = async () => {
+      setShowFinishMessage(true);
+      soundManager.playWin();
+      await new Promise(r => setTimeout(r, 2000));
+      setShowFinishMessage(false);
+      
+      setIsDefeatedAnim(true);
+      await new Promise(r => setTimeout(r, 1500));
+      
+      setIsProcessing(false);
+      setComboCount(0);
+      comboRef.current = 0;
+      
+      if (isFinalBossMode) setAppState('victory');
+      else if (collection.some(m => m.name === enemy.name)) advanceLevel();
+      else setAppState('capture');
+  }
 
   const handleMove = async (id: string, targetX: number, targetY: number) => {
     if (isProcessing || movesLeft <= 0 || showFinishMessage || enemy.currentHp <= 0) return;
@@ -479,12 +458,7 @@ const App: React.FC = () => {
     }
 
     const targetTile = board.find(t => t.x === targetX && t.y === targetY);
-    
-    // Check if either tile is immovable (Frozen, Rock, Steel)
-    // Though UI prevents drag, this prevents click-swap
-    if (sourceTile.status !== 'normal' || (targetTile && targetTile.status !== 'normal')) {
-        return; 
-    }
+    if (sourceTile.status !== 'normal' || (targetTile && targetTile.status !== 'normal')) return; 
     
     let tempBoard = [...board];
     if (targetTile) {
@@ -499,18 +473,19 @@ const App: React.FC = () => {
 
     const { groups } = findMatches(tempBoard);
     
+    // Only allow swap if it results in match
     if (groups.length > 0) {
         soundManager.playSwap();
         setMovesLeft(prev => prev - 1);
         setSelectedTileId(null);
         setBoard(tempBoard);
-        setIsProcessing(true); 
-
-        await new Promise(r => setTimeout(r, 200));
-        
-        // FIX: Start Combo at 0, so the first match counts as 1
-        await processMatches(tempBoard, 0, id);
+        setIsProcessing(true); // Lock input
+        comboRef.current = 0; // Reset combo counter
+        // We do NOT call processMatches yet. 
+        // We wait for Board to animate the swap. 
+        // Board will call handleBoardSettled -> evaluateBoardState.
     } else {
+        // Invalid swap - animate back
         setBoard(tempBoard); 
         soundManager.playSwap(); 
         await new Promise(r => setTimeout(r, 250));
@@ -525,169 +500,91 @@ const App: React.FC = () => {
      setSkillCharges(prev => ({...prev, [monster.id]: 0}));
      setIsProcessing(true);
 
-     // --- SKILL VISUALIZATION OVERLAY ---
      setActiveSkillMessage(`${monster.name} usó ${monster.skillName}`);
      setTimeout(() => setActiveSkillMessage(null), 2000);
-
      soundManager.playBeam();
      
-     // 1. Determine Effect Amount based on description parsing or loose logic based on cost
-     // We'll use a rough mapping based on cost to amount for logic:
-     // Cost 10-12 -> 4-5 items
-     // Cost 14-15 -> 5-6 items
-     // Cost 18-20 -> 6-8 items
-     // Cost 25+ -> 8-10 items
      let amount = 4;
      if (monster.skillCost >= 14) amount = 5;
      if (monster.skillCost >= 18) amount = 6;
      if (monster.skillCost >= 25) amount = 8;
      
-     // Override based on specific types if needed, but the formula above fits the prompt reasonably well.
-     
      let newBoard = [...board];
      let physicsTriggered = false;
      let tilesToRemove: string[] = [];
 
-     // --- NUKE LOGIC (Fixed Damage) ---
      if (monster.skillType === 'nuke') {
          let dmg = 2000;
          if (monster.skillCost >= 25) dmg = 3500;
-         // Visual Nuke Effect?
          fireProjectile(GRID_WIDTH/2, GRID_HEIGHT/2, 'yellow');
-         
          setTimeout(() => {
              applyDamage(dmg);
              addFloatingText(GRID_WIDTH/2, GRID_HEIGHT/2, `¡${dmg}!`, 'yellow', 2);
+             // Check win immediately
+             if (enemy.currentHp - dmg <= 0) handleVictory();
+             else setIsProcessing(false);
          }, 600);
+         return;
      } 
-     // --- BOARD MANIPULATION LOGIC ---
      else {
+         // ... (Logic for other skills remains similar, populating tilesToRemove) ...
          if (monster.skillType === 'clear_rocks') {
-             // Find rocks
              const rocks = newBoard.filter(t => t.status === 'rock');
-             const targets = rocks.sort(() => 0.5 - Math.random()).slice(0, amount);
-             if (targets.length > 0) {
-                 targets.forEach(t => tilesToRemove.push(t.id));
-                 physicsTriggered = true;
-             }
+             rocks.sort(() => 0.5 - Math.random()).slice(0, amount).forEach(t => tilesToRemove.push(t.id));
+             if (tilesToRemove.length > 0) physicsTriggered = true;
          } 
          else if (monster.skillType === 'clear_ice') {
-             // Find ice
              const ice = newBoard.filter(t => t.status === 'ice');
              const targets = ice.sort(() => 0.5 - Math.random()).slice(0, amount);
              if (targets.length > 0) {
-                 // Melt ice: Change status to normal. Gravity applies if they can match now.
                  const targetIds = new Set(targets.map(t => t.id));
                  newBoard = newBoard.map(t => targetIds.has(t.id) ? { ...t, status: 'normal' } : t);
                  physicsTriggered = true; 
              }
          }
          else if (monster.skillType === 'clear_steel') {
-             // Find steel
              const steel = newBoard.filter(t => t.status === 'steel');
-             const targets = steel.sort(() => 0.5 - Math.random()).slice(0, amount);
-             if (targets.length > 0) {
-                 targets.forEach(t => tilesToRemove.push(t.id));
-                 physicsTriggered = true;
-             }
+             steel.sort(() => 0.5 - Math.random()).slice(0, amount).forEach(t => tilesToRemove.push(t.id));
+             if (tilesToRemove.length > 0) physicsTriggered = true;
          }
          else if (monster.skillType === 'clear_random') {
-             // Find any tile (prefer normal, but can take obstacles if needed)
-             // Prompt says "elimina 4, 5, 6 casillas al azar (interferencias o no)"
-             const targets = newBoard.sort(() => 0.5 - Math.random()).slice(0, amount);
-             if (targets.length > 0) {
-                 targets.forEach(t => tilesToRemove.push(t.id));
-                 physicsTriggered = true;
-             }
+             newBoard.sort(() => 0.5 - Math.random()).slice(0, amount).forEach(t => tilesToRemove.push(t.id));
+             if (tilesToRemove.length > 0) physicsTriggered = true;
          }
          else if (monster.skillType === 'clear_self') {
-             // Find tiles of this monster
              const selfTiles = newBoard.filter(t => t.monsterId === monster.id && t.status === 'normal');
-             const targets = selfTiles.sort(() => 0.5 - Math.random()).slice(0, amount + 1); // +1 bonus for self
-             if (targets.length > 0) {
-                 targets.forEach(t => tilesToRemove.push(t.id));
-                 physicsTriggered = true;
-             }
+             selfTiles.sort(() => 0.5 - Math.random()).slice(0, amount + 1).forEach(t => tilesToRemove.push(t.id));
+             if (tilesToRemove.length > 0) physicsTriggered = true;
          }
          else if (monster.skillType === 'convert_type') {
-             // Replace N random non-self tiles with self
              const candidates = newBoard.filter(t => t.monsterId !== monster.id && t.status === 'normal');
              const targets = candidates.sort(() => 0.5 - Math.random()).slice(0, amount);
-             
              if (targets.length > 0) {
                  const targetIds = new Set(targets.map(t => t.id));
-                 newBoard = newBoard.map(t => {
-                     if (targetIds.has(t.id)) {
-                         return {
-                             ...t,
-                             monsterId: monster.id,
-                             type: monster.type,
-                             emoji: monster.emoji,
-                             image: monster.image,
-                             isMatched: true // Trigger match animation visually? No, just change type.
-                             // Actually, changing type might immediately form matches. 
-                             // We don't remove them, we just change them.
-                         };
-                     }
-                     return t;
-                 });
-                 // We don't remove, but we want to check matches immediately.
+                 newBoard = newBoard.map(t => targetIds.has(t.id) ? { ...t, monsterId: monster.id, type: monster.type, emoji: monster.emoji, image: monster.image } : t);
                  physicsTriggered = true;
              }
          }
 
-         // Update visual board first
          setBoard(newBoard);
          
          if (physicsTriggered) {
-             // Wait small delay for visual effect
-             await new Promise(r => setTimeout(r, 200));
-             
-             // If we have tiles to remove (Rock, Steel, Random, Self), we treat them as "matched" for gravity
-             // We need to pass the IDs to remove to applyGravity
+             await new Promise(r => setTimeout(r, 300));
              if (tilesToRemove.length > 0) {
-                 // Mark them matched visually first?
                  setBoard(prev => prev.map(t => tilesToRemove.includes(t.id) ? { ...t, isMatched: true } : t));
-                 await new Promise(r => setTimeout(r, 150));
-
+                 await new Promise(r => setTimeout(r, 300));
                  const boardAfterFall = applyGravity(newBoard, tilesToRemove, team);
                  setBoard(boardAfterFall);
-                 // Now process matches on the new board
-                 await new Promise(r => setTimeout(r, 200));
-                 await processMatches(boardAfterFall, 1);
+                 // Board will animate, then trigger handleBoardSettled -> evaluateBoardState
              } else {
-                 // Only conversions or ice melting happened, check matches directly on newBoard
-                 await processMatches(newBoard, 1);
+                 // Conversion/Ice melt didn't move tiles, but might have created matches
+                 // Trigger eval manually since no physical movement might occur
+                 evaluateBoardState();
              }
+         } else {
+             setIsProcessing(false);
          }
      }
-     
-     // Check Win Condition (if Nuke killed it)
-     // Use timeout to sync with potential nuke delay above
-     setTimeout(async () => {
-         if (enemy.currentHp <= 0) {
-            setShowFinishMessage(true);
-            soundManager.playWin(); // SURPRISE CHIME
-            
-            // Auto hide to continue animation flow
-            setTimeout(() => setShowFinishMessage(false), 2000);
-            
-            // Wait for message to clear loop in processMatches if it was running, 
-            // but here we are in skill execution which is separate.
-            // We manually trigger end sequence.
-            await new Promise(r => setTimeout(r, 2000));
-            
-            setIsDefeatedAnim(true);
-            await new Promise(r => setTimeout(r, 1500));
-
-            setIsProcessing(false);
-            if (isFinalBossMode) setAppState('victory');
-            else if (collection.some(m => m.name === enemy.name)) advanceLevel();
-            else setAppState('capture');
-         } else {
-            setIsProcessing(false);
-         }
-     }, monster.skillType === 'nuke' ? 650 : 0);
   };
 
   const addFloatingText = (x: number, y: number, text: string, color: string = 'white', scale: number = 1) => {
@@ -702,14 +599,9 @@ const App: React.FC = () => {
           const startX = rect.left + (gridX + 0.5) * (rect.width / 6);
           const startY = rect.top + (gridY + 0.5) * (rect.height / 6);
           const targetX = window.innerWidth / 2;
-          
-          // Target roughly the center of the Boss Card (approx 25% of screen height)
           const targetY = window.innerHeight * 0.22; 
-          
           const id = Date.now() + Math.random().toString();
           setProjectiles(prev => [...prev, { id, startX, startY, targetX, targetY, color, icon, startTime: Date.now() }]);
-          
-          // Cleanup is now handled by the Board canvas logic or self-expiry
           setTimeout(() => setProjectiles(prev => prev.filter(p => p.id !== id)), 500); 
       }
   };
@@ -744,9 +636,6 @@ const App: React.FC = () => {
           ))}
           
           {floatingTexts.map(ft => {
-              // Calculate screen position from grid coords if needed, or pass screen coords.
-              // Logic in addFloatingText passes grid coords. Need to convert.
-              // IMPORTANT: logic uses grid coords. Board ref needed.
               let left = 0, top = 0;
               if (boardRef.current) {
                   const rect = boardRef.current.getBoundingClientRect();
@@ -771,7 +660,7 @@ const App: React.FC = () => {
               );
           })}
           
-          {/* Skill Usage Overlay - Semi-transparent Message */}
+          {/* Skill Usage Overlay */}
           {activeSkillMessage && (
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/60 px-8 py-6 rounded-2xl backdrop-blur-md border border-white/20 animate-in zoom-in duration-300 shadow-2xl">
                   <span className="text-white font-black text-2xl md:text-3xl text-center whitespace-nowrap drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
@@ -988,6 +877,7 @@ const App: React.FC = () => {
                             isProcessing={isProcessing} 
                             shake={boardShake}
                             isFrozen={showFinishMessage}
+                            onBoardSettled={handleBoardSettled}
                         />
                     </div>
                 </div>

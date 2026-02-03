@@ -7,22 +7,22 @@ interface BoardProps {
   onMove: (id: string, x: number, y: number) => void;
   isProcessing: boolean;
   shake?: boolean;
-  isFrozen?: boolean; // New prop to stop physics
+  isFrozen?: boolean;
+  onBoardSettled?: () => void; // New callback for physics sync
 }
 
 // Visual State for a tile in the animation loop
 interface VisualTile {
     x: number; 
     y: number; 
-    scaleX: number; // For squash effect & zoom on spawn
-    scaleY: number; // For squash effect & zoom on spawn
+    scaleX: number;
+    scaleY: number;
     opacity: number;
     rotation: number;
-    squashTime: number; // Timestamp when impact started
-    isSquashing: boolean;
+    // Track previous y to detect landing velocity if needed, 
+    // but simplified check works for now.
 }
 
-// UPDATED: Using RGBA for transparency (40% opacity for backgrounds)
 const CANVAS_THEME: Record<string, { fill: string, border: string }> = {
     'Fuego': { fill: 'rgba(254, 202, 202, 0.4)', border: '#fca5a5' },     
     'Agua': { fill: 'rgba(191, 219, 254, 0.4)', border: '#93c5fd' },     
@@ -41,7 +41,10 @@ const CANVAS_THEME: Record<string, { fill: string, border: string }> = {
     'Hada': { fill: 'rgba(254, 205, 211, 0.4)', border: '#fda4af' }      
 };
 
-// Polyfill for round rect drawing
+// Physics Constants
+const MOVE_SPEED = 0.15; // Fast, snappy fall
+const SETTLE_THRESHOLD = 0.05; // Distance to consider "arrived"
+
 const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
     ctx.moveTo(x + r, y);
     ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -50,12 +53,16 @@ const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w:
     ctx.arcTo(x, y, x + w, y, r);
 };
 
-const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessing, shake, isFrozen = false }) => {
+const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessing, shake, isFrozen = false, onBoardSettled }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
   const imageCache = useRef<Record<string, HTMLImageElement>>({});
   const animState = useRef<Record<string, VisualTile>>({});
+  
+  // Physics State Tracking
+  const isMovingRef = useRef(false);
+  const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const [dragState, setDragState] = useState<{ id: string, startX: number, startY: number, currX: number, currY: number } | null>(null);
 
@@ -66,39 +73,23 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
       
       board.forEach(tile => {
           if (currentAnim[tile.id]) {
-              // Existing tile
+              // Existing tile: Keep current visual position to interpolate from
               newAnim[tile.id] = {
                   ...currentAnim[tile.id],
               };
           } else {
-              // New tile logic
-              const isSpawn = tile.id.includes('spawn') || tile.id.includes('init');
+              // New tile (Spawn)
+              // Staggered start based on Y to prevent overlap on spawn
+              const startY = tile.id.includes('spawn') ? -1.5 - (GRID_HEIGHT - tile.y) * 0.5 : tile.y;
               
-              if (isSpawn) {
-                  // SPAWN: Start at target position but scale 0 (ZOOM IN)
-                  newAnim[tile.id] = {
-                      x: tile.x,
-                      y: tile.y, 
-                      scaleX: 0, 
-                      scaleY: 0,
-                      opacity: 1,
-                      rotation: 0,
-                      squashTime: 0,
-                      isSquashing: false
-                  };
-              } else {
-                 // FALLBACK (shouldn't really happen for non-spawns unless explicit fall logic needed)
-                  newAnim[tile.id] = {
-                      x: tile.x,
-                      y: tile.y - 1,
-                      scaleX: 1,
-                      scaleY: 1,
-                      opacity: 1,
-                      rotation: 0,
-                      squashTime: 0,
-                      isSquashing: false
-                  };
-              }
+              newAnim[tile.id] = {
+                  x: tile.x,
+                  y: startY, 
+                  scaleX: tile.id.includes('init') ? 0 : 1, // Init tiles zoom in, spawns fall in
+                  scaleY: tile.id.includes('init') ? 0 : 1,
+                  opacity: 1,
+                  rotation: 0,
+              };
           }
           
           if (tile.image && !imageCache.current[tile.image]) {
@@ -109,6 +100,10 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
       });
       
       animState.current = newAnim;
+      // When board data updates, we assume movement might start, so reset the settled trigger
+      if (settleTimeoutRef.current) clearTimeout(settleTimeoutRef.current);
+      isMovingRef.current = true; // Assume moving until proven static by render loop
+
   }, [board]);
 
   // Main Animation Loop
@@ -164,10 +159,10 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               }
           }
 
-          // 2. Tiles
-          const speed = 0.08; // Even slower falling speed
+          // 2. Tiles Logic & Draw
           const now = Date.now();
-          
+          let globalIsMoving = false; // Track for this frame
+
           // Helper Function to Draw a Tile
           const drawTile = (tile: TileData, visual: VisualTile, isDragging: boolean) => {
                if (visual.opacity < 0.01) return;
@@ -192,9 +187,9 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               let currentScaleY = visual.scaleY;
               
               if (isDragging) {
-                  currentScaleX = 1.2; // Bigger when dragging
+                  currentScaleX = 1.2;
                   currentScaleY = 1.2;
-                  ctx.globalAlpha = 0.8; // More transparent when dragging
+                  ctx.globalAlpha = 0.8;
               } else {
                   ctx.globalAlpha = visual.opacity;
               }
@@ -225,16 +220,14 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               const xPos = drawX + pad;
               const yPos = drawY + pad;
 
-              // Shadow (Only if not matched)
+              // Shadow
               if (!tile.isMatched) {
                   if (isDragging) {
-                      // Lifted shadow
                       ctx.fillStyle = 'rgba(0,0,0,0.3)';
                       ctx.beginPath();
                       drawRoundedRect(ctx, xPos + 5, yPos + 15, innerSize, innerSize, cornerRadius);
                       ctx.fill();
                   } else {
-                      // Grounded shadow
                       ctx.fillStyle = 'rgba(0,0,0,0.15)';
                       ctx.beginPath();
                       drawRoundedRect(ctx, xPos, yPos + 4, innerSize, innerSize, cornerRadius);
@@ -242,7 +235,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   }
               }
               
-              // Main Box Fill
+              // Main Box
               ctx.fillStyle = fillColor;
               ctx.beginPath();
               drawRoundedRect(ctx, xPos, yPos, innerSize, innerSize, cornerRadius);
@@ -262,8 +255,6 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               // Content
               const centerX = drawX + pSize / 2;
               const centerY = drawY + pSize / 2;
-
-              // Force opaque fill for content to avoid inheriting transparency
               ctx.fillStyle = '#ffffff';
 
               if (tile.status === 'rock') {
@@ -303,16 +294,14 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   if (tile.image && imageCache.current[tile.image] && imageCache.current[tile.image].complete) {
                        const img = imageCache.current[tile.image];
                        const imgSize = innerSize * 0.85;
-                       
                        if (tile.status === 'ice') ctx.globalAlpha = (isDragging ? 0.8 : visual.opacity) * 0.7;
-                       
                        ctx.drawImage(img, centerX - imgSize/2, centerY - imgSize/2, imgSize, imgSize);
                        ctx.globalAlpha = isDragging ? 0.8 : visual.opacity; 
                   } else {
                        ctx.font = `${innerSize * 0.6}px "Fredoka", Arial`; 
                        ctx.textAlign = 'center';
                        ctx.textBaseline = 'middle';
-                       ctx.fillStyle = '#ffffff'; // Ensure emoji is opaque
+                       ctx.fillStyle = '#ffffff';
                        ctx.fillText(tile.emoji, centerX, centerY + (innerSize * 0.05));
                   }
 
@@ -343,7 +332,6 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
           };
 
           // --- SEPARATE RENDER PASSES ---
-          // 1. Update Physics & Draw ALL Non-Dragged Tiles
           let draggedTileData: { tile: TileData, visual: VisualTile } | null = null;
 
           board.forEach(tile => {
@@ -352,73 +340,71 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               
               const isDragging = dragState?.id === tile.id;
 
-              // PHYSICS
+              // PHYSICS: LINEAR MOVEMENT
               if (!isDragging && !isFrozen) {
-                  // Y Movement
+                  let moving = false;
+
+                  // Horizontal (Instant/Fast for swaps)
+                  const diffX = tile.x - visual.x;
+                  if (Math.abs(diffX) > 0.01) {
+                      visual.x += Math.sign(diffX) * 0.25;
+                      moving = true;
+                  } else {
+                      visual.x = tile.x;
+                  }
+
+                  // Vertical (Constant Speed)
                   const diffY = tile.y - visual.y;
-                  if (Math.abs(diffY) <= speed) {
-                      // IMPACT
-                      if (visual.y !== tile.y && Math.abs(diffY) > 0.01) {
-                          if (!visual.isSquashing) {
-                              visual.isSquashing = true;
-                              visual.squashTime = now;
+                  if (Math.abs(diffY) > SETTLE_THRESHOLD) {
+                      // If we are close, snap. If not, move linear.
+                      if (Math.abs(diffY) <= MOVE_SPEED) {
+                          visual.y = tile.y;
+                      } else {
+                          visual.y += Math.sign(diffY) * MOVE_SPEED;
+                      }
+                      moving = true;
+                  } else {
+                      // LANDING LOGIC & SQUASH EFFECT
+                      if (visual.y !== tile.y) {
+                          visual.y = tile.y;
+                          // If it was previously falling (implied by not being equal), trigger squash
+                          // Only squash if it's NOT a matched tile disappearing
+                          if (!tile.isMatched) {
+                             visual.scaleX = 1.35;
+                             visual.scaleY = 0.75;
                           }
                       }
-                      visual.y = tile.y;
-                  } else {
-                      visual.y += Math.sign(diffY) * speed;
-                      visual.isSquashing = false;
                   }
                   
-                  // X Movement
-                  const diffX = tile.x - visual.x;
-                  if (Math.abs(diffX) <= speed) visual.x = tile.x;
-                  else visual.x += Math.sign(diffX) * speed;
+                  if (moving) globalIsMoving = true;
 
-                  // Animation Tweens
-                  // ZOOM IN SPAWN EFFECT
-                  if (visual.scaleX < 1 && !tile.isMatched) {
-                      visual.scaleX += 0.1;
-                      visual.scaleY += 0.1;
-                      if (visual.scaleX > 1) { visual.scaleX = 1; visual.scaleY = 1; }
-                  }
-                  // SQUASH EFFECT
-                  else if (visual.isSquashing) {
-                      const elapsed = now - visual.squashTime;
-                      const duration = 200; 
-                      if (elapsed < duration) {
-                          const t = elapsed / duration;
-                          const intensity = 0.15; 
-                          const factor = Math.sin(t * Math.PI); 
-                          visual.scaleX = 1 + (factor * intensity);      
-                          visual.scaleY = 1 - (factor * intensity * 0.8); 
-                      } else {
-                          visual.scaleX = 1;
-                          visual.scaleY = 1;
-                          visual.isSquashing = false;
-                      }
-                  } else {
-                      visual.scaleX += (1 - visual.scaleX) * 0.2;
-                      visual.scaleY += (1 - visual.scaleY) * 0.2;
-                  }
-
+                  // Match Effects & Squash Restoration
                   if (tile.isMatched) {
                       visual.scaleX *= 0.8;
                       visual.scaleY *= 0.8;
                       visual.opacity *= 0.8;
                       visual.rotation += 0.2;
                   } else {
+                      // Elastic Scale Restoration (Hooke's Law approximation)
+                      if (Math.abs(visual.scaleX - 1) > 0.01) {
+                          visual.scaleX += (1 - visual.scaleX) * 0.2; // 20% restoration per frame
+                          visual.scaleY += (1 - visual.scaleY) * 0.2;
+                      } else {
+                          visual.scaleX = 1;
+                          visual.scaleY = 1;
+                      }
+                      
                       if (selectedTileId === tile.id) {
                           const pulse = 1 + Math.sin(now / 100) * 0.05;
                           visual.scaleX = pulse;
                           visual.scaleY = pulse;
-                      }
+                      } 
+                      
                       visual.opacity = 1;
                       visual.rotation = 0;
                   }
               }
 
-              // RENDER LOGIC
               if (isDragging) {
                   draggedTileData = { tile, visual };
               } else {
@@ -426,19 +412,33 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               }
           });
 
-          // 2. Draw Dragged Tile (Top Z-Index)
           if (draggedTileData) {
               drawTile(draggedTileData.tile, draggedTileData.visual, true);
           }
+          
+          // --- DETECT SETTLED STATE ---
+          if (isMovingRef.current && !globalIsMoving) {
+              // Transition from moving to stopped -> trigger callback
+              if (onBoardSettled) {
+                  // Small debounce to ensure we are truly stopped (prevents jitter triggers)
+                  if (!settleTimeoutRef.current) {
+                      settleTimeoutRef.current = setTimeout(() => {
+                          onBoardSettled();
+                          settleTimeoutRef.current = null;
+                      }, 50);
+                  }
+              }
+          }
+          isMovingRef.current = globalIsMoving;
 
           animationFrameId = requestAnimationFrame(render);
       };
 
       render();
       return () => cancelAnimationFrame(animationFrameId);
-  }, [board, selectedTileId, dragState, shake, isFrozen]);
+  }, [board, selectedTileId, dragState, shake, isFrozen, onBoardSettled]);
 
-  // Input Handling
+  // Input Handling (Pointer)
   const handlePointerDown = (e: React.PointerEvent) => {
       if (isProcessing || isFrozen || !containerRef.current) return;
       e.preventDefault();
