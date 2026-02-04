@@ -12,7 +12,6 @@ import { soundManager } from './utils/sound';
 import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  // --- Game State ---
   const [appState, setAppState] = useState<GameState['status']>('menu');
   const [level, setLevel] = useState(1);
   const [movesLeft, setMovesLeft] = useState(INITIAL_MOVES);
@@ -22,7 +21,6 @@ const App: React.FC = () => {
   const [isFinalBossMode, setIsFinalBossMode] = useState(false);
   const [levelPlan, setLevelPlan] = useState<Boss[]>([]);
   
-  // --- Battle State ---
   const [nextPreviewEnemy, setNextPreviewEnemy] = useState<Boss>(MONSTER_DB[4]); 
   const [board, setBoard] = useState<TileData[]>([]);
   const [enemy, setEnemy] = useState<Boss>(MONSTER_DB[4]);
@@ -30,8 +28,9 @@ const App: React.FC = () => {
   
   // Interference Logic
   const [turnsToInterference, setTurnsToInterference] = useState(3);
+  const [bossAttacking, setBossAttacking] = useState(false); 
+  const [pendingInterference, setPendingInterference] = useState(false);
   
-  // Lock input during animations
   const [isProcessing, setIsProcessing] = useState(false);
   const [stageCleared, setStageCleared] = useState(false); 
   const [showFinishMessage, setShowFinishMessage] = useState(false);
@@ -40,11 +39,10 @@ const App: React.FC = () => {
   const [comboCount, setComboCount] = useState(0);
   const [skillCharges, setSkillCharges] = useState<Record<string, number>>({});
   const [showSkillMenu, setShowSkillMenu] = useState(false);
-  const [activeSkillMessage, setActiveSkillMessage] = useState<string | null>(null); // New Skill Overlay State
+  const [activeSkillMessage, setActiveSkillMessage] = useState<string | null>(null); 
   const [victoryAnim, setVictoryAnim] = useState(false);
   const [isDefeatedAnim, setIsDefeatedAnim] = useState(false); 
   
-  // --- Visuals ---
   const [bossShake, setBossShake] = useState(false);
   const [boardShake, setBoardShake] = useState(false); 
   const [lastDamage, setLastDamage] = useState<number | null>(null);
@@ -52,23 +50,29 @@ const App: React.FC = () => {
   const [projectiles, setProjectiles] = useState<ProjectileData[]>([]);
   const [captureCaught, setCaptureCaught] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const [hitEffect, setHitEffect] = useState(false); // New Hit Effect State
+  const [hitEffect, setHitEffect] = useState(false); 
   
-  // UI States
   const [viewingMonster, setViewingMonster] = useState<Boss | null>(null);
   const [showQuitConfirmation, setShowQuitConfirmation] = useState(false);
 
   const bossRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   
-  // Logic Refs to avoid closure staleness during async cycles
   const comboRef = useRef(0);
   const boardRefState = useRef<TileData[]>([]); 
-  const isEvaluatorBusyRef = useRef(false); // CRITICAL: Semáforo para evitar bucles infinitos
+  const isEvaluatorBusyRef = useRef(false); 
+  const finishTriggeredRef = useRef(false); // Prevents multiple "YA ESTÁ"
 
   useEffect(() => {
       boardRefState.current = board;
   }, [board]);
+  
+  // Resume game loop after finish message disappears
+  useEffect(() => {
+      if (!showFinishMessage && finishTriggeredRef.current) {
+           setTimeout(() => evaluateBoardState(), 100);
+      }
+  }, [showFinishMessage]);
 
   const enterFullscreen = () => {
       try {
@@ -76,9 +80,7 @@ const App: React.FC = () => {
         if (elem.requestFullscreen) {
             elem.requestFullscreen().catch(err => console.log(err));
         }
-      } catch (e) {
-          console.log("Fullscreen not supported");
-      }
+      } catch (e) { console.log("Fullscreen not supported"); }
   };
 
   const scaleEnemyHp = (baseEnemy: Boss, lvl: number, isFinal: boolean): Boss => {
@@ -160,7 +162,7 @@ const App: React.FC = () => {
       setBoard(createBoard(team));
       setAppState('playing');
       setSkillCharges({});
-      setTurnsToInterference(Math.floor(Math.random() * 4) + 2); // 2-5
+      setTurnsToInterference(Math.floor(Math.random() * 3) + 2); 
       setIsProcessing(false);
       setVictoryAnim(false);
       setIsDefeatedAnim(false);
@@ -168,8 +170,11 @@ const App: React.FC = () => {
       setShowFinishMessage(false);
       setImgError(false);
       setIsResettingBoard(false);
+      setBossAttacking(false);
+      setPendingInterference(false);
       comboRef.current = 0;
-      isEvaluatorBusyRef.current = false; // Reset lock
+      isEvaluatorBusyRef.current = false; 
+      finishTriggeredRef.current = false;
   };
 
   const handleCaptureResult = (caught: boolean) => {
@@ -215,23 +220,18 @@ const App: React.FC = () => {
       });
   };
 
-  // --- EVENT DRIVEN LOGIC CYCLE ---
-  
-  // This function checks the state of the board ONLY when triggered.
-  // Triggered by: User Move OR Board Physics Settle
+  // --- MAIN GAME LOOP ---
   const evaluateBoardState = async () => {
-      // LOCK CHECK: If we are already running logic (waiting for matches to show), ignore new settlement events.
+      if (showFinishMessage) return; // Prevent loop while message shows
       if (isEvaluatorBusyRef.current) return;
       isEvaluatorBusyRef.current = true;
 
       try {
-          // Use ref to get latest without dependency issues in callback
           const currentBoard = boardRefState.current;
           const { groups } = findMatches(currentBoard);
           
           // -- CASE 1: MATCHES FOUND --
           if (groups.length > 0) {
-              // Identify intersecting
               const tileCounts = new Map<string, number>();
               groups.forEach(g => g.ids.forEach(id => tileCounts.set(id, (tileCounts.get(id) || 0) + 1)));
               const intersectionIds = new Set<string>();
@@ -246,22 +246,29 @@ const App: React.FC = () => {
               });
 
               const allIdsForGravity = new Set<string>();
-              const allIdsToUnfreeze = new Set<string>();
-              // Track IDs already processed in this batch to accumulatively update the board visual state
+              // We will use this to accumulate IDs for gravity, but for unfreezing we handle it per group for sync
               const accumulatedMatchedIds = new Set<string>(); 
+              const accumulatedUnfrozenIds = new Set<string>();
 
               let localCombo = comboRef.current;
+              let currentEnemyHp = enemy.currentHp;
+              let bossDefeatedThisLoop = false;
 
-              // Process logic for matches SEQUENTIALLY VISUALLY
               for (const group of groupsToProcess) {
+                // If message appeared, break loop to pause, will resume later
+                if (showFinishMessage) break;
+
                 const attacker = team.find(m => m.id === group.type);
                 const size = group.ids.length; 
                 
-                // Collect IDs for final gravity calculation
+                // Identify IDs in this specific group
+                const groupIdsToUnfreeze = new Set<string>();
+                
                 group.ids.forEach(id => {
                     const tile = currentBoard.find(t => t.id === id);
                     if (tile?.status === 'ice') {
-                        allIdsToUnfreeze.add(id);
+                        groupIdsToUnfreeze.add(id);
+                        accumulatedUnfrozenIds.add(id);
                     } else {
                         allIdsForGravity.add(id);
                     }
@@ -273,6 +280,7 @@ const App: React.FC = () => {
                     accumulatedMatchedIds.add(id);
                 });
 
+                // ALWAYS show damage visuals if there is an attacker, even if boss is dead (Extra Combo)
                 if (attacker) {
                     setSkillCharges(prev => ({ ...prev, [attacker.id]: Math.min(attacker.skillCost, (prev[attacker.id] || 0) + size) }));
                     const baseAttack = 100;
@@ -294,8 +302,13 @@ const App: React.FC = () => {
                     }
 
                     setTimeout(() => {
+                            // Apply damage logic regardless of local HP state to ensure kill is registered
                             if (dmg > 0) applyDamage(dmg);
-                    }, 500 + (projectileCount * 40)); 
+                    }, 500 + (projectileCount * 40));
+                    
+                    if (currentEnemyHp > 0) {
+                        currentEnemyHp -= dmg;
+                    }
                 }
                 
                 localCombo++;
@@ -303,116 +316,115 @@ const App: React.FC = () => {
                 setComboCount(localCombo);
                 soundManager.playMatch(localCombo);
                 
-                // VISUAL STEP: Update board to show THIS specific group matching
-                // We use accumulatedMatchedIds so previous matches in this loop stay matched
+                // Update Board: Match tiles AND Unfreeze tiles simultaneously
                 setBoard(prev => prev.map(t => {
-                    if (accumulatedMatchedIds.has(t.id)) return { ...t, isMatched: true };
+                    if (accumulatedMatchedIds.has(t.id)) {
+                         // Fix: Do not mark ICE as matched to prevent pop-zoom animation
+                         if (t.status === 'ice') return t;
+                         return { ...t, isMatched: true };
+                    }
+                    // THAW ICE HERE: If this tile is in the group to unfreeze, set it to normal NOW
+                    if (groupIdsToUnfreeze.has(t.id) || accumulatedUnfrozenIds.has(t.id)) {
+                        return { ...t, status: 'normal' };
+                    }
                     return t;
                 }));
 
-                // STAGGER DELAY: Wait between each match pop
+                // Fast gameplay speed
                 await new Promise(r => setTimeout(r, 250));
+                
+                // --- FINISH TRIGGER LOGIC ---
+                // Mark defeat but DO NOT BREAK loop. Let gravity happen.
+                if (currentEnemyHp <= 0 && !finishTriggeredRef.current && !bossDefeatedThisLoop) {
+                    bossDefeatedThisLoop = true;
+                    finishTriggeredRef.current = true;
+                    // Schedule the "YA ESTÁ" message to appear AFTER the projectile delay (approx 750ms total)
+                    setTimeout(() => {
+                        setShowFinishMessage(true);
+                        setTimeout(() => setShowFinishMessage(false), 2000);
+                    }, 600); 
+                }
               }
               
-              // WAIT: Small pause after all matches shown before gravity kicks in
+              if (showFinishMessage) {
+                  isEvaluatorBusyRef.current = false;
+                  return;
+              }
+              
               await new Promise(r => setTimeout(r, 200)); 
 
-              // LOGIC: Remove & Gravity
+              // We already unfroze tiles in the loop, but we need to pass a clean state to gravity
+              // Ensuring all unfrozen tiles are marked normal for gravity calc
               const boardWithUnfrozen = currentBoard.map(t => {
-                  if (allIdsToUnfreeze.has(t.id)) return { ...t, status: 'normal' as const, isMatched: false };
+                  if (accumulatedUnfrozenIds.has(t.id)) return { ...t, status: 'normal' as const, isMatched: false };
                   return t;
               });
 
-              // This triggers board state change -> Board Component detects change -> Animates -> Calls onBoardSettled when done
               const boardAfterFall = applyGravity(boardWithUnfrozen, Array.from(allIdsForGravity), team);
               setBoard(boardAfterFall);
               
-              // EXIT. The lock releases in `finally`, allowing the NEXT onBoardSettled (from gravity) to trigger us again.
               return;
           }
 
           // -- CASE 2: NO MATCHES (Stable State) --
-          
-          // Check Win Condition (Delayed check to ensure projectiles hit)
-          if (enemy.currentHp <= 0) {
-              handleVictory();
+          // VICTORY CHECK HAS PRIORITY over Game Over
+          if (enemy.currentHp <= 0 && finishTriggeredRef.current) {
+              // Wait 1 second before showing victory animation as requested
+              await new Promise(r => setTimeout(r, 1000));
+              handleVictorySequence();
               return;
           }
 
-          // Turn End Logic (Interference, etc) - Only if we were processing matches
+          // Reset combo logic
           if (comboRef.current > 0) {
-              comboRef.current = 0; // Reset combo for next move
+              comboRef.current = 0; 
               setTimeout(() => setComboCount(0), 1000);
-              
-              let nextBoard = currentBoard;
-              let changed = false;
+          }
 
-              // Steel Decay
-              const steelDecayed = nextBoard.map(t => {
-                  if (t.status === 'steel' && t.statusLife !== undefined) {
-                      const newLife = t.statusLife - 1;
-                      changed = true;
-                      if (newLife <= 0) return { ...t, isMatched: true };
-                      return { ...t, statusLife: newLife };
-                  }
-                  return t;
-              });
+          // --- INTERFERENCE EXECUTION ---
+          // It only happens when board is stable AND pending flag is set
+          if (pendingInterference && enemy.currentHp > 0) {
+              setPendingInterference(false); // consume flag
+              setBossAttacking(true);
+              soundManager.playThrow();
               
-              const steelToRemove = steelDecayed.filter(t => t.status === 'steel' && t.isMatched).map(t => t.id);
-              
-              if (steelToRemove.length > 0) {
-                  setBoard(steelDecayed);
-                  await new Promise(r => setTimeout(r, 200));
-                  nextBoard = applyGravity(steelDecayed, steelToRemove, team);
-                  setBoard(nextBoard);
-                  // Gravity happened, so we return and wait for settle to re-eval
-                  return; 
-              } else if (changed) {
-                  setBoard(steelDecayed);
-                  nextBoard = steelDecayed;
-              }
-
-              // Interference
-              let interferenceTriggered = false;
-              setTurnsToInterference(prev => {
-                  const next = prev - 1;
-                  if (next <= 0) {
-                      const interferedBoard = applyInterference(nextBoard, enemy.type);
-                      setBoard(interferedBoard);
-                      soundManager.playThrow();
-                      setBoardShake(true);
-                      setTimeout(() => setBoardShake(false), 300);
-                      interferenceTriggered = true;
-                      return Math.floor(Math.random() * 4) + 2; 
-                  }
-                  return next;
-              });
-              
-              if (interferenceTriggered) {
-                  setIsProcessing(false);
-                  return;
-              }
-
-              // Deadlock Check
-              if (!hasPossibleMoves(nextBoard)) {
-                  setIsResettingBoard(true);
+              setTimeout(() => {
+                  const interferedBoard = applyInterference(currentBoard, enemy.type);
+                  setBoard(interferedBoard);
+                  setBoardShake(true);
                   setTimeout(() => {
-                      setBoard(createBoard(team));
-                      setIsResettingBoard(false);
-                      setIsProcessing(false);
-                  }, 1000);
-              } else {
-                  setIsProcessing(false);
-              }
+                      setBoardShake(false);
+                      setBossAttacking(false);
+                      // After interference, we MUST check matches again
+                      // but setIsProcessing is false? No, keep it true or let handleBoardSettled pick it up
+                      // handleBoardSettled will trigger evaluate again.
+                  }, 300);
+              }, 600);
+              
+              // We return here, keeping isProcessing=true until interference settles
+              return;
+          }
 
-              if (movesLeft <= 0 && enemy.currentHp > 0) {
-                  setAppState('gameover');
-                  soundManager.playLose();
-              }
+          let nextBoard = currentBoard;
+          
+          if (!hasPossibleMoves(nextBoard)) {
+              setIsResettingBoard(true);
+              setTimeout(() => {
+                  setBoard(createBoard(team));
+                  setIsResettingBoard(false);
+                  setIsProcessing(false);
+              }, 1000);
           } else {
-              // No combo happened, just stable
+              // Unlock input
               setIsProcessing(false);
           }
+
+          // GAME OVER CHECK - Only if Enemy is ALIVE
+          if (movesLeft <= 0 && enemy.currentHp > 0) {
+              setAppState('gameover');
+              soundManager.playLose();
+          }
+
       } catch(e) {
           console.error("Board Error:", e);
           setIsProcessing(false);
@@ -421,26 +433,19 @@ const App: React.FC = () => {
       }
   };
 
-  // Called by Board component when visual animation finishes
   const handleBoardSettled = () => {
-      if (isProcessing) {
+      // Resume loop if board stops moving
+      if (isProcessing && !showFinishMessage) {
           evaluateBoardState();
       }
   };
 
-  const handleVictory = async () => {
-      setShowFinishMessage(true);
-      soundManager.playWin();
-      await new Promise(r => setTimeout(r, 2000));
-      setShowFinishMessage(false);
-      
+  const handleVictorySequence = async () => {
       setIsDefeatedAnim(true);
       await new Promise(r => setTimeout(r, 1500));
-      
       setIsProcessing(false);
       setComboCount(0);
       comboRef.current = 0;
-      
       if (isFinalBossMode) setAppState('victory');
       else if (collection.some(m => m.name === enemy.name)) advanceLevel();
       else setAppState('capture');
@@ -473,19 +478,51 @@ const App: React.FC = () => {
 
     const { groups } = findMatches(tempBoard);
     
-    // Only allow swap if it results in match
     if (groups.length > 0) {
         soundManager.playSwap();
         setMovesLeft(prev => prev - 1);
         setSelectedTileId(null);
+        
+        // --- STEEL DECAY LOGIC (IRON BLOCKS) ---
+        // Decrement life of all steel blocks by 1 on every valid move
+        tempBoard = tempBoard.map(t => {
+            if (t.status === 'steel' && t.statusLife !== undefined) {
+                const newLife = t.statusLife - 1;
+                if (newLife <= 0) {
+                    // Break the steel: replace with a random monster from current team
+                    const randomMonster = team[Math.floor(Math.random() * team.length)];
+                    return {
+                        ...t,
+                        status: 'normal',
+                        statusLife: undefined,
+                        monsterId: randomMonster.id,
+                        type: randomMonster.type,
+                        emoji: randomMonster.emoji,
+                        image: randomMonster.image
+                    };
+                }
+                return { ...t, statusLife: newLife };
+            }
+            return t;
+        });
+
         setBoard(tempBoard);
-        setIsProcessing(true); // Lock input
-        comboRef.current = 0; // Reset combo counter
-        // We do NOT call processMatches yet. 
-        // We wait for Board to animate the swap. 
-        // Board will call handleBoardSettled -> evaluateBoardState.
+        setIsProcessing(true); 
+        comboRef.current = 0; 
+        
+        // --- COUNTDOWN INTERFERENCE HERE ---
+        // Only on valid moves
+        setTurnsToInterference(prev => {
+            const next = prev - 1;
+            if (next <= 0) {
+                setPendingInterference(true);
+                // Reset timer for next cycle
+                return Math.floor(Math.random() * 3) + 2;
+            }
+            return next;
+        });
+
     } else {
-        // Invalid swap - animate back
         setBoard(tempBoard); 
         soundManager.playSwap(); 
         await new Promise(r => setTimeout(r, 250));
@@ -520,14 +557,21 @@ const App: React.FC = () => {
          setTimeout(() => {
              applyDamage(dmg);
              addFloatingText(GRID_WIDTH/2, GRID_HEIGHT/2, `¡${dmg}!`, 'yellow', 2);
-             // Check win immediately
-             if (enemy.currentHp - dmg <= 0) handleVictory();
-             else setIsProcessing(false);
+             
+             if (enemy.currentHp - dmg <= 0 && !finishTriggeredRef.current) {
+                 finishTriggeredRef.current = true;
+                 setTimeout(() => {
+                     setShowFinishMessage(true);
+                     setTimeout(() => setShowFinishMessage(false), 2000);
+                 }, 600);
+             } else {
+                 setIsProcessing(false);
+             }
          }, 600);
          return;
      } 
      else {
-         // ... (Logic for other skills remains similar, populating tilesToRemove) ...
+         // ... (Skill logic same as before) ...
          if (monster.skillType === 'clear_rocks') {
              const rocks = newBoard.filter(t => t.status === 'rock');
              rocks.sort(() => 0.5 - Math.random()).slice(0, amount).forEach(t => tilesToRemove.push(t.id));
@@ -575,10 +619,7 @@ const App: React.FC = () => {
                  await new Promise(r => setTimeout(r, 300));
                  const boardAfterFall = applyGravity(newBoard, tilesToRemove, team);
                  setBoard(boardAfterFall);
-                 // Board will animate, then trigger handleBoardSettled -> evaluateBoardState
              } else {
-                 // Conversion/Ice melt didn't move tiles, but might have created matches
-                 // Trigger eval manually since no physical movement might occur
                  evaluateBoardState();
              }
          } else {
@@ -610,7 +651,6 @@ const App: React.FC = () => {
 
   return (
     <div className={`h-screen w-screen bg-black flex overflow-hidden font-sans select-none text-slate-100 relative`}>
-      {/* Background */}
       <div className={`absolute inset-0 z-0 transition-all duration-700 ease-in-out ${getLevelBackground(level, enemy.type)}`}></div>
 
       {appState === 'menu' && (
@@ -622,7 +662,6 @@ const App: React.FC = () => {
           />
       )}
       
-      {/* --- GLOBAL OVERLAY LAYER (For Projectiles & Floating Text) --- */}
       <div className="absolute inset-0 pointer-events-none z-[60] overflow-visible">
           {projectiles.map(p => (
               <AttackProjectile 
@@ -660,7 +699,6 @@ const App: React.FC = () => {
               );
           })}
           
-          {/* Skill Usage Overlay */}
           {activeSkillMessage && (
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/60 px-8 py-6 rounded-2xl backdrop-blur-md border border-white/20 animate-in zoom-in duration-300 shadow-2xl">
                   <span className="text-white font-black text-2xl md:text-3xl text-center whitespace-nowrap drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
@@ -670,8 +708,6 @@ const App: React.FC = () => {
           )}
       </div>
 
-      {/* ... (Gallery and TeamSelect remain same, code elided for brevity if not changed, but must include full file in update) ... */}
-      
       {appState === 'gallery' && (
           <div className="absolute inset-0 z-50 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-indigo-900 via-slate-900 to-black p-4 flex flex-col">
               <div className="flex justify-between items-center mb-4">
@@ -763,7 +799,6 @@ const App: React.FC = () => {
           <>
             <div className={`flex-1 h-full flex flex-col items-center relative min-w-0 justify-center z-10 w-full max-w-md mx-auto transition-all duration-700`}>
              
-                {/* SUPERADO OVERLAY */}
                 {stageCleared && (
                     <div className="absolute inset-x-0 top-1/3 z-50 flex items-center justify-center pointer-events-none">
                         <div className="bg-yellow-500/90 text-white font-black text-4xl md:text-6xl px-8 py-4 rounded-xl shadow-2xl border-4 border-white transform -rotate-3 animate-bounce drop-shadow-[0_4px_0_rgba(0,0,0,0.5)]">
@@ -772,7 +807,6 @@ const App: React.FC = () => {
                     </div>
                 )}
                 
-                {/* RESET OVERLAY */}
                 {isResettingBoard && (
                      <div className="absolute inset-x-0 top-1/2 z-50 flex items-center justify-center pointer-events-none">
                         <div className="bg-indigo-600/90 text-white font-black text-xl px-4 py-2 rounded-xl shadow-2xl border border-white animate-pulse">
@@ -835,10 +869,8 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="w-full max-w-md px-4 mb-2 z-10 relative mx-auto" ref={bossRef}>
-                    {/* Pass Hit Effect State */}
-                    <BossCard boss={enemy} shake={bossShake} damageTaken={lastDamage} isDefeated={isDefeatedAnim} hitEffect={hitEffect} />
+                    <BossCard boss={enemy} shake={bossShake} damageTaken={lastDamage} isDefeated={isDefeatedAnim} hitEffect={hitEffect} isAttacking={bossAttacking} />
                     
-                    {/* MODIFIED COMBO UI - MOVED RIGHT - HIDE IF < 2 */}
                     {comboCount >= 2 && (
                         <div className="absolute top-1/2 right-6 transform -translate-y-1/2 z-50 flex flex-col items-center animate-in zoom-in duration-300 pointer-events-none">
                             <span className="text-yellow-400 font-bold text-xs italic tracking-widest drop-shadow-md whitespace-nowrap mb-1">
@@ -854,10 +886,8 @@ const App: React.FC = () => {
                     )}
                 </div>
 
-                {/* BOARD CONTAINER */}
                 <div className="flex-1 w-full relative flex flex-col justify-center items-center z-10" ref={boardRef}>
                     
-                    {/* "¡YA ESTÁ!" OVERLAY - MOVED INSIDE BOARD CONTAINER & UNBLURRED - SIMPLIFIED FONT */}
                     {showFinishMessage && (
                         <div className="absolute inset-0 z-[100] flex items-center justify-center pointer-events-none">
                             <div className="relative transform scale-125 animate-gentle-bounce">
@@ -868,7 +898,6 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    {/* BOARD COMPONENT - REDUCED BLUR */}
                     <div className={`transition-all duration-700 w-full flex justify-center ${showFinishMessage ? 'blur-[2px]' : ''}`}>
                         <Board 
                             board={board} 
@@ -878,6 +907,7 @@ const App: React.FC = () => {
                             shake={boardShake}
                             isFrozen={showFinishMessage}
                             onBoardSettled={handleBoardSettled}
+                            isComboActive={comboCount > 0} 
                         />
                     </div>
                 </div>

@@ -7,10 +7,11 @@ interface BossCardProps {
   shake: boolean;
   damageTaken: number | null;
   isDefeated?: boolean; 
-  hitEffect?: boolean; // New Prop for visual hit impact
+  hitEffect?: boolean; 
+  isAttacking?: boolean; // New prop for interference animation
 }
 
-const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeated, hitEffect }) => {
+const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeated, hitEffect, isAttacking }) => {
   const [imgError, setImgError] = useState(false);
   const hpPercentage = Math.max(0, (boss.currentHp / boss.maxHp) * 100);
 
@@ -26,10 +27,22 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
       </div>
 
       {/* Main Container for Boss Image */}
-      <div className={`relative transition-transform duration-100 ${shake ? 'animate-shake-violent' : ''}`}>
+      <div className={`relative transition-transform duration-300 
+          ${shake ? 'animate-shake-violent' : ''}
+          ${isAttacking ? 'scale-150 z-50' : ''}
+      `}>
+        {/* SHOUTING SOUND WAVES EFFECT - LARGER */}
+        {isAttacking && (
+            <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
+                <div className="absolute w-full h-full rounded-full border-[6px] border-red-500/60 animate-ping scale-150"></div>
+                <div className="absolute w-full h-full rounded-full border-[6px] border-yellow-500/60 animate-ping animation-delay-200 scale-125"></div>
+            </div>
+        )}
+
         <div className={`w-32 h-32 md:w-40 md:h-40 flex items-center justify-center filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)] 
-            ${!shake && !isDefeated ? 'animate-float-boss' : ''} 
+            ${!shake && !isDefeated && !isAttacking ? 'animate-float-boss' : ''} 
             ${isDefeated ? 'animate-defeat-crumble' : ''}
+            relative z-10
         `}>
             {boss.image && !imgError ? (
                 <img 
@@ -43,15 +56,13 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
             )}
         </div>
         
-        {/* HIT EFFECT OVERLAY (Center of Monster) */}
+        {/* HIT EFFECT OVERLAY */}
         {hitEffect && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none w-full h-full flex items-center justify-center">
-                {/* Subtle Ripple/Flash Effect */}
                 <div className="w-20 h-20 bg-white/60 rounded-full animate-ripple-fade shadow-[0_0_20px_rgba(255,255,255,0.5)]"></div>
             </div>
         )}
         
-        {/* Smoke Effect triggers when defeated */}
         {isDefeated && (
             <>
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
@@ -142,6 +153,10 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
          }
          .animate-ripple-fade {
              animation: ripple-fade 0.3s ease-out forwards;
+         }
+         
+         .animation-delay-200 {
+             animation-delay: 0.2s;
          }
       `}</style>
     </div>
