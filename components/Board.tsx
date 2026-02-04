@@ -10,6 +10,7 @@ interface BoardProps {
   isFrozen?: boolean;
   onBoardSettled?: () => void;
   isComboActive?: boolean;
+  highlightedTileIds?: string[]; // NEW PROP
 }
 
 interface VisualTile {
@@ -65,7 +66,7 @@ const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w:
     ctx.arcTo(x, y, x + w, y, r);
 };
 
-const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessing, shake, isFrozen = false, onBoardSettled, isComboActive }) => {
+const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessing, shake, isFrozen = false, onBoardSettled, isComboActive, highlightedTileIds = [] }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -239,7 +240,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
           }
 
           const now = Date.now();
-          let globalIsMoving = false; 
+          let globalIsMoving = false; // Tracks actual TILES moving
           let draggedTileData: { tile: TileData, visual: VisualTile } | null = null;
           
           const drawTile = (tile: TileData, visual: VisualTile, isDragging: boolean) => {
@@ -255,6 +256,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                        const vibe = Math.sin(now / 30) * 0.03;
                        drawX += vibe * pSize;
                        drawY += (Math.cos(now / 30) * 0.03) * pSize;
+                       // Note: Vibration counts as moving, but it self-terminates after 500ms
                        globalIsMoving = true; 
                   }
               }
@@ -402,12 +404,14 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   drawRoundedRect(ctx, xPos, yPos, innerSize, innerSize, cornerRadius);
                   ctx.fill();
                   
-                  // Highlight Border for Match
-                  if (tile.isMatched && isComboActive) {
+                  // Highlight Border for Match OR SKILL
+                  const isHighlighted = highlightedTileIds.includes(tile.id);
+
+                  if ((tile.isMatched && isComboActive) || isHighlighted) {
                        ctx.strokeStyle = '#fff';
                        ctx.lineWidth = 4;
                        ctx.shadowColor = 'white';
-                       ctx.shadowBlur = 10;
+                       ctx.shadowBlur = isHighlighted ? 20 : 10;
                   } else {
                        ctx.strokeStyle = selectedTileId === tile.id ? '#facc15' : borderColor;
                        ctx.lineWidth = selectedTileId === tile.id ? 4 : 3;
@@ -533,7 +537,8 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
           if (draggedTileData) drawTile(draggedTileData.tile, draggedTileData.visual, true);
           
           if (particlesRef.current.length > 0) {
-              globalIsMoving = true;
+              // Particles update, but they do NOT set globalIsMoving to true anymore.
+              // This fixes the freeze where long particles prevented game logic from proceeding.
               for (let i = particlesRef.current.length - 1; i >= 0; i--) {
                   const p = particlesRef.current[i];
                   p.x += p.vx;
@@ -579,7 +584,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
 
       render();
       return () => cancelAnimationFrame(animationFrameId);
-  }, [board, selectedTileId, dragState, shake, isFrozen, onBoardSettled, isComboActive]);
+  }, [board, selectedTileId, dragState, shake, isFrozen, onBoardSettled, isComboActive, highlightedTileIds]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
       if (isProcessing || isFrozen || !containerRef.current) return;

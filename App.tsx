@@ -39,7 +39,12 @@ const App: React.FC = () => {
   const [comboCount, setComboCount] = useState(0);
   const [skillCharges, setSkillCharges] = useState<Record<string, number>>({});
   const [showSkillMenu, setShowSkillMenu] = useState(false);
-  const [activeSkillMessage, setActiveSkillMessage] = useState<string | null>(null); 
+  
+  // --- NEW SKILL ANIMATION STATES ---
+  const [skillAnnouncement, setSkillAnnouncement] = useState<string | null>(null);
+  const [animatingSkillBoss, setAnimatingSkillBoss] = useState<Boss | null>(null);
+  const [highlightedTileIds, setHighlightedTileIds] = useState<string[]>([]);
+
   const [victoryAnim, setVictoryAnim] = useState(false);
   const [isDefeatedAnim, setIsDefeatedAnim] = useState(false); 
   
@@ -63,6 +68,9 @@ const App: React.FC = () => {
   const isEvaluatorBusyRef = useRef(false); 
   const finishTriggeredRef = useRef(false); // Prevents multiple "YA ESTÁ"
 
+  // SAFETY WATCHDOG REF
+  const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
       boardRefState.current = board;
   }, [board]);
@@ -73,6 +81,33 @@ const App: React.FC = () => {
            setTimeout(() => evaluateBoardState(), 100);
       }
   }, [showFinishMessage]);
+
+  // --- EMERGENCY WATCHDOG ---
+  // If isProcessing is true for more than 4 seconds and nothing happens, unlock the board.
+  useEffect(() => {
+      if (isProcessing && !showFinishMessage && !animatingSkillBoss) {
+          if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
+          processingTimeoutRef.current = setTimeout(() => {
+              console.warn("Safety Watchdog Triggered: Unfreezing board");
+              
+              // 1. Unfreeze state ONLY (Do not reset combos visually to avoid jumping numbers)
+              setIsProcessing(false);
+              isEvaluatorBusyRef.current = false;
+              
+              // 2. FAILSAFE: If enemy is dead but game stuck, force victory
+              if (enemy.currentHp <= 0) {
+                   console.warn("Watchdog: Enemy dead, forcing victory sequence.");
+                   handleVictorySequence();
+              }
+
+          }, 4000);
+      } else {
+          if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
+      }
+      return () => {
+          if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
+      };
+  }, [isProcessing, showFinishMessage, animatingSkillBoss, enemy.currentHp]);
 
   const enterFullscreen = () => {
       try {
@@ -175,6 +210,9 @@ const App: React.FC = () => {
       comboRef.current = 0;
       isEvaluatorBusyRef.current = false; 
       finishTriggeredRef.current = false;
+      setSkillAnnouncement(null);
+      setAnimatingSkillBoss(null);
+      setHighlightedTileIds([]);
   };
 
   const handleCaptureResult = (caught: boolean) => {
@@ -252,7 +290,7 @@ const App: React.FC = () => {
 
               let localCombo = comboRef.current;
               let currentEnemyHp = enemy.currentHp;
-              let bossDefeatedThisLoop = false;
+              // Removed bossDefeatedThisLoop to allow combos to continue even if HP < 0
 
               for (const group of groupsToProcess) {
                 // If message appeared, break loop to pause, will resume later
@@ -332,18 +370,6 @@ const App: React.FC = () => {
 
                 // Fast gameplay speed
                 await new Promise(r => setTimeout(r, 250));
-                
-                // --- FINISH TRIGGER LOGIC ---
-                // Mark defeat but DO NOT BREAK loop. Let gravity happen.
-                if (currentEnemyHp <= 0 && !finishTriggeredRef.current && !bossDefeatedThisLoop) {
-                    bossDefeatedThisLoop = true;
-                    finishTriggeredRef.current = true;
-                    // Schedule the "YA ESTÁ" message to appear AFTER the projectile delay (approx 750ms total)
-                    setTimeout(() => {
-                        setShowFinishMessage(true);
-                        setTimeout(() => setShowFinishMessage(false), 2000);
-                    }, 600); 
-                }
               }
               
               if (showFinishMessage) {
@@ -367,9 +393,15 @@ const App: React.FC = () => {
           }
 
           // -- CASE 2: NO MATCHES (Stable State) --
-          // VICTORY CHECK HAS PRIORITY over Game Over
-          if (enemy.currentHp <= 0 && finishTriggeredRef.current) {
-              // Wait 1 second before showing victory animation as requested
+          // VICTORY CHECK: Now we only trigger victory if board is stable AND boss is dead
+          if (enemy.currentHp <= 0) {
+              // Trigger "YA ESTÁ" only once when we settle
+              if (!finishTriggeredRef.current) {
+                   finishTriggeredRef.current = true;
+                   setShowFinishMessage(true);
+                   setTimeout(() => setShowFinishMessage(false), 2000);
+              }
+              
               await new Promise(r => setTimeout(r, 1000));
               handleVictorySequence();
               return;
@@ -444,7 +476,7 @@ const App: React.FC = () => {
       setIsDefeatedAnim(true);
       await new Promise(r => setTimeout(r, 1500));
       setIsProcessing(false);
-      setComboCount(0);
+      setComboCount(0); // Reset darkness
       comboRef.current = 0;
       if (isFinalBossMode) setAppState('victory');
       else if (collection.some(m => m.name === enemy.name)) advanceLevel();
@@ -536,11 +568,19 @@ const App: React.FC = () => {
      setShowSkillMenu(false);
      setSkillCharges(prev => ({...prev, [monster.id]: 0}));
      setIsProcessing(true);
-
-     setActiveSkillMessage(`${monster.name} usó ${monster.skillName}`);
-     setTimeout(() => setActiveSkillMessage(null), 2000);
      soundManager.playBeam();
-     
+
+     // --- STEP 1: SKILL ANNOUNCEMENT (1.8s) ---
+     setSkillAnnouncement(`${monster.name} usó ${monster.skillName}`);
+     await new Promise(r => setTimeout(r, 1800));
+     setSkillAnnouncement(null);
+
+     // --- STEP 2: BIG BOSS ANIMATION (2s - Longer) ---
+     setAnimatingSkillBoss(monster);
+     await new Promise(r => setTimeout(r, 2000));
+     setAnimatingSkillBoss(null);
+
+     // --- STEP 3: LOGIC CALCULATION & HIGHLIGHTING (1s) ---
      let amount = 4;
      if (monster.skillCost >= 14) amount = 5;
      if (monster.skillCost >= 18) amount = 6;
@@ -549,32 +589,28 @@ const App: React.FC = () => {
      let newBoard = [...board];
      let physicsTriggered = false;
      let tilesToRemove: string[] = [];
+     let highlightedIds: string[] = [];
 
      if (monster.skillType === 'nuke') {
+         // Nuke doesn't target tiles, it just hits the boss
          let dmg = 2000;
          if (monster.skillCost >= 25) dmg = 3500;
          fireProjectile(GRID_WIDTH/2, GRID_HEIGHT/2, 'yellow');
-         setTimeout(() => {
-             applyDamage(dmg);
-             addFloatingText(GRID_WIDTH/2, GRID_HEIGHT/2, `¡${dmg}!`, 'yellow', 2);
-             
-             if (enemy.currentHp - dmg <= 0 && !finishTriggeredRef.current) {
-                 finishTriggeredRef.current = true;
-                 setTimeout(() => {
-                     setShowFinishMessage(true);
-                     setTimeout(() => setShowFinishMessage(false), 2000);
-                 }, 600);
-             } else {
-                 setIsProcessing(false);
-             }
-         }, 600);
-         return;
+         
+         await new Promise(r => setTimeout(r, 600));
+         applyDamage(dmg);
+         addFloatingText(GRID_WIDTH/2, GRID_HEIGHT/2, `¡${dmg}!`, 'yellow', 2);
+         
+         // Trigger evaluation to check death
+         setTimeout(() => evaluateBoardState(), 400);
+         return; 
      } 
      else {
-         // ... (Skill logic same as before) ...
          if (monster.skillType === 'clear_rocks') {
              const rocks = newBoard.filter(t => t.status === 'rock');
-             rocks.sort(() => 0.5 - Math.random()).slice(0, amount).forEach(t => tilesToRemove.push(t.id));
+             const targets = rocks.sort(() => 0.5 - Math.random()).slice(0, amount);
+             targets.forEach(t => tilesToRemove.push(t.id));
+             highlightedIds = targets.map(t => t.id);
              if (tilesToRemove.length > 0) physicsTriggered = true;
          } 
          else if (monster.skillType === 'clear_ice') {
@@ -582,22 +618,30 @@ const App: React.FC = () => {
              const targets = ice.sort(() => 0.5 - Math.random()).slice(0, amount);
              if (targets.length > 0) {
                  const targetIds = new Set(targets.map(t => t.id));
+                 // For ice, we convert them to normal in board immediately but highlight them
+                 highlightedIds = targets.map(t => t.id);
                  newBoard = newBoard.map(t => targetIds.has(t.id) ? { ...t, status: 'normal' } : t);
                  physicsTriggered = true; 
              }
          }
          else if (monster.skillType === 'clear_steel') {
              const steel = newBoard.filter(t => t.status === 'steel');
-             steel.sort(() => 0.5 - Math.random()).slice(0, amount).forEach(t => tilesToRemove.push(t.id));
+             const targets = steel.sort(() => 0.5 - Math.random()).slice(0, amount);
+             targets.forEach(t => tilesToRemove.push(t.id));
+             highlightedIds = targets.map(t => t.id);
              if (tilesToRemove.length > 0) physicsTriggered = true;
          }
          else if (monster.skillType === 'clear_random') {
-             newBoard.sort(() => 0.5 - Math.random()).slice(0, amount).forEach(t => tilesToRemove.push(t.id));
+             const targets = newBoard.sort(() => 0.5 - Math.random()).slice(0, amount);
+             targets.forEach(t => tilesToRemove.push(t.id));
+             highlightedIds = targets.map(t => t.id);
              if (tilesToRemove.length > 0) physicsTriggered = true;
          }
          else if (monster.skillType === 'clear_self') {
              const selfTiles = newBoard.filter(t => t.monsterId === monster.id && t.status === 'normal');
-             selfTiles.sort(() => 0.5 - Math.random()).slice(0, amount + 1).forEach(t => tilesToRemove.push(t.id));
+             const targets = selfTiles.sort(() => 0.5 - Math.random()).slice(0, amount + 1);
+             targets.forEach(t => tilesToRemove.push(t.id));
+             highlightedIds = targets.map(t => t.id);
              if (tilesToRemove.length > 0) physicsTriggered = true;
          }
          else if (monster.skillType === 'convert_type') {
@@ -605,26 +649,35 @@ const App: React.FC = () => {
              const targets = candidates.sort(() => 0.5 - Math.random()).slice(0, amount);
              if (targets.length > 0) {
                  const targetIds = new Set(targets.map(t => t.id));
+                 highlightedIds = targets.map(t => t.id);
                  newBoard = newBoard.map(t => targetIds.has(t.id) ? { ...t, monsterId: monster.id, type: monster.type, emoji: monster.emoji, image: monster.image } : t);
                  physicsTriggered = true;
              }
          }
-
-         setBoard(newBoard);
          
-         if (physicsTriggered) {
-             await new Promise(r => setTimeout(r, 300));
-             if (tilesToRemove.length > 0) {
-                 setBoard(prev => prev.map(t => tilesToRemove.includes(t.id) ? { ...t, isMatched: true } : t));
-                 await new Promise(r => setTimeout(r, 300));
-                 const boardAfterFall = applyGravity(newBoard, tilesToRemove, team);
-                 setBoard(boardAfterFall);
-             } else {
-                 evaluateBoardState();
-             }
-         } else {
-             setIsProcessing(false);
+         // APPLY BOARD STATE (Visual update before physics)
+         setBoard(newBoard);
+
+         // HIGHLIGHT AFFECTED TILES (1s)
+         if (highlightedIds.length > 0) {
+             setHighlightedTileIds(highlightedIds);
+             await new Promise(r => setTimeout(r, 1000));
+             setHighlightedTileIds([]);
          }
+
+         // --- STEP 4: EXECUTION (Physics) ---
+         if (tilesToRemove.length > 0) {
+             // First mark as matched (implode effect if supported or just visual prep)
+             setBoard(prev => prev.map(t => tilesToRemove.includes(t.id) ? { ...t, isMatched: true } : t));
+             await new Promise(r => setTimeout(r, 300));
+             
+             // Then apply gravity
+             const boardAfterFall = applyGravity(newBoard, tilesToRemove, team);
+             setBoard(boardAfterFall);
+         }
+         
+         // FORCE RE-EVALUATION to ensure gravity/matches apply even if no tiles were removed (e.g. ice melt)
+         setTimeout(() => evaluateBoardState(), 400);
      }
   };
 
@@ -698,14 +751,6 @@ const App: React.FC = () => {
                   </div>
               );
           })}
-          
-          {activeSkillMessage && (
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/60 px-8 py-6 rounded-2xl backdrop-blur-md border border-white/20 animate-in zoom-in duration-300 shadow-2xl">
-                  <span className="text-white font-black text-2xl md:text-3xl text-center whitespace-nowrap drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
-                      {activeSkillMessage}
-                  </span>
-              </div>
-          )}
       </div>
 
       {appState === 'gallery' && (
@@ -888,6 +933,35 @@ const App: React.FC = () => {
 
                 <div className="flex-1 w-full relative flex flex-col justify-center items-center z-10" ref={boardRef}>
                     
+                    {/* SKILL ANNOUNCEMENT MESSAGE - MOVED INSIDE BOARD CONTAINER FOR CENTERING */}
+                    {skillAnnouncement && (
+                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/80 px-8 py-6 rounded-2xl backdrop-blur-md border-2 border-white/30 animate-in zoom-in duration-300 shadow-2xl flex flex-col items-center">
+                            <span className="text-white font-black text-2xl md:text-3xl text-center whitespace-nowrap drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
+                                {skillAnnouncement}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* BIG BOSS ANIMATION OVERLAY */}
+                    {animatingSkillBoss && (
+                         <div className="absolute inset-0 z-[80] flex items-center justify-center pointer-events-none">
+                             <div className="relative animate-grow-fade-rotate">
+                                 {/* Spinning Shine Behind */}
+                                 <div className="absolute inset-0 -m-10 bg-gradient-to-tr from-yellow-300/50 to-white/0 rounded-full animate-spin-slow blur-xl"></div>
+                                 <div className="absolute inset-0 -m-4 border-4 border-white/40 rounded-full animate-ping"></div>
+
+                                 {/* Boss Image */}
+                                 <div className="w-48 h-48 md:w-64 md:h-64 flex items-center justify-center filter drop-shadow-[0_0_30px_rgba(255,255,255,0.8)]">
+                                     {animatingSkillBoss.image ? (
+                                        <img src={animatingSkillBoss.image} alt="Skill" className="w-full h-full object-contain" />
+                                     ) : (
+                                        <span className="text-9xl">{animatingSkillBoss.emoji}</span>
+                                     )}
+                                 </div>
+                             </div>
+                         </div>
+                    )}
+
                     {showFinishMessage && (
                         <div className="absolute inset-0 z-[100] flex items-center justify-center pointer-events-none">
                             <div className="relative transform scale-125 animate-gentle-bounce">
@@ -908,6 +982,7 @@ const App: React.FC = () => {
                             isFrozen={showFinishMessage}
                             onBoardSettled={handleBoardSettled}
                             isComboActive={comboCount > 0} 
+                            highlightedTileIds={highlightedTileIds}
                         />
                     </div>
                 </div>
@@ -920,6 +995,21 @@ const App: React.FC = () => {
                 }
                 .animate-gentle-bounce {
                     animation: gentle-bounce 2s infinite ease-in-out;
+                }
+                @keyframes grow-fade-rotate {
+                    0% { transform: scale(0.5) rotate(-10deg); opacity: 0; }
+                    20% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+                    100% { transform: scale(1.5) rotate(10deg); opacity: 0; }
+                }
+                .animate-grow-fade-rotate {
+                    animation: grow-fade-rotate 2s ease-out forwards;
+                }
+                @keyframes spin-slow {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                .animate-spin-slow {
+                    animation: spin-slow 3s linear infinite;
                 }
             `}</style>
           </>
