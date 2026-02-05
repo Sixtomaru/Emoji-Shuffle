@@ -83,31 +83,40 @@ const App: React.FC = () => {
   }, [showFinishMessage]);
 
   // --- EMERGENCY WATCHDOG ---
-  // If isProcessing is true for more than 4 seconds and nothing happens, unlock the board.
+  // Improved Logic: Only trigger if the game is truly STUCK.
+  // We reset the timer every time the board changes or combo increases, ensuring it doesn't interrupt valid long combos.
   useEffect(() => {
       if (isProcessing && !showFinishMessage && !animatingSkillBoss) {
           if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
+          
           processingTimeoutRef.current = setTimeout(() => {
-              console.warn("Safety Watchdog Triggered: Unfreezing board");
+              console.warn("Safety Watchdog Triggered: Unfreezing board & Resetting State");
               
-              // 1. Unfreeze state ONLY (Do not reset combos visually to avoid jumping numbers)
+              // 1. Unfreeze state
               setIsProcessing(false);
               isEvaluatorBusyRef.current = false;
               
-              // 2. FAILSAFE: If enemy is dead but game stuck, force victory
+              // 2. FORCE UI CLEANUP (Fixes stuck dark screen)
+              // Since we determined the game is stuck, we MUST clear visual artifacts.
+              setComboCount(0);
+              comboRef.current = 0;
+              setHighlightedTileIds([]);
+              
+              // 3. FAILSAFE: If enemy is dead but game stuck, force victory
               if (enemy.currentHp <= 0) {
                    console.warn("Watchdog: Enemy dead, forcing victory sequence.");
                    handleVictorySequence();
               }
 
-          }, 4000);
+          }, 6000); // Increased to 6s to be safe
       } else {
           if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
       }
       return () => {
           if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
       };
-  }, [isProcessing, showFinishMessage, animatingSkillBoss, enemy.currentHp]);
+      // CRITICAL: Added 'board' and 'comboCount' to dependencies so the timer resets during active gameplay
+  }, [isProcessing, showFinishMessage, animatingSkillBoss, enemy.currentHp, board, comboCount]);
 
   const enterFullscreen = () => {
       try {
@@ -408,9 +417,10 @@ const App: React.FC = () => {
           }
 
           // Reset combo logic
-          if (comboRef.current > 0) {
+          if (comboRef.current > 0 || comboCount > 0) {
               comboRef.current = 0; 
-              setTimeout(() => setComboCount(0), 1000);
+              // Faster fade out (500ms) to avoid "stuck" feeling
+              setTimeout(() => setComboCount(0), 500);
           }
 
           // --- INTERFERENCE EXECUTION ---
@@ -568,6 +578,7 @@ const App: React.FC = () => {
      setShowSkillMenu(false);
      setSkillCharges(prev => ({...prev, [monster.id]: 0}));
      setIsProcessing(true);
+     comboRef.current = 0; // Reset combo counter at start of skill
      soundManager.playBeam();
 
      // --- STEP 1: SKILL ANNOUNCEMENT (1.8s) ---
@@ -673,6 +684,11 @@ const App: React.FC = () => {
              
              // Then apply gravity
              const boardAfterFall = applyGravity(newBoard, tilesToRemove, team);
+             setBoard(boardAfterFall);
+         } else if (physicsTriggered) {
+             // Case: Status changed (e.g. Ice -> Normal) but no removal. 
+             // We MUST apply gravity to fill any gaps that might exist below newly normalized tiles.
+             const boardAfterFall = applyGravity(newBoard, [], team);
              setBoard(boardAfterFall);
          }
          
