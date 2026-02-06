@@ -118,6 +118,17 @@ const App: React.FC = () => {
       // CRITICAL: Added 'board' and 'comboCount' to dependencies so the timer resets during active gameplay
   }, [isProcessing, showFinishMessage, animatingSkillBoss, enemy.currentHp, board, comboCount]);
 
+// --- AÑADIR ESTE EFFECT NUEVO ---
+  // Esto actúa como un seguro: si el juego te devuelve el control,
+  // se asegura al 100% de que la oscuridad desaparezca.
+  useEffect(() => {
+      if (!isProcessing && (comboCount > 0 || comboRef.current > 0)) {
+          setComboCount(0);
+          comboRef.current = 0;
+          setHighlightedTileIds([]);
+      }
+  }, [isProcessing, comboCount]);
+
   const enterFullscreen = () => {
       try {
         const elem = document.documentElement;
@@ -201,27 +212,36 @@ const App: React.FC = () => {
   };
 
   const startLevel = () => {
-      setEnemy(nextPreviewEnemy);
-      setMovesAtStart(movesLeft);
-      setBoard(createBoard(team));
-      setAppState('playing');
-      setSkillCharges({});
-      setTurnsToInterference(Math.floor(Math.random() * 3) + 2); 
-      setIsProcessing(false);
+      // 1. Resetear estados visuales CRÍTICOS antes de nada
+      setIsDefeatedAnim(false); 
       setVictoryAnim(false);
-      setIsDefeatedAnim(false);
       setStageCleared(false);
       setShowFinishMessage(false);
-      setImgError(false);
-      setIsResettingBoard(false);
-      setBossAttacking(false);
-      setPendingInterference(false);
+      setComboCount(0); // Asegurar que no hay oscuridad
       comboRef.current = 0;
-      isEvaluatorBusyRef.current = false; 
-      finishTriggeredRef.current = false;
       setSkillAnnouncement(null);
       setAnimatingSkillBoss(null);
       setHighlightedTileIds([]);
+      setBossAttacking(false);
+      setHitEffect(false);
+      
+      // 2. Configurar lógica del nivel
+      setEnemy(nextPreviewEnemy);
+      setMovesAtStart(movesLeft);
+      setBoard(createBoard(team));
+      setSkillCharges({});
+      setTurnsToInterference(Math.floor(Math.random() * 3) + 2); 
+      
+      // 3. Resetear flags de lógica
+      setIsProcessing(false);
+      setPendingInterference(false);
+      isEvaluatorBusyRef.current = false; 
+      finishTriggeredRef.current = false;
+      setImgError(false);
+      setIsResettingBoard(false);
+      
+      // 4. Cambiar pantalla
+      setAppState('playing');
   };
 
   const handleCaptureResult = (caught: boolean) => {
@@ -269,7 +289,7 @@ const App: React.FC = () => {
 
   // --- MAIN GAME LOOP ---
   const evaluateBoardState = async () => {
-      if (showFinishMessage) return; // Prevent loop while message shows
+      if (showFinishMessage) return;
       if (isEvaluatorBusyRef.current) return;
       isEvaluatorBusyRef.current = true;
 
@@ -277,10 +297,15 @@ const App: React.FC = () => {
           const currentBoard = boardRefState.current;
           const { groups } = findMatches(currentBoard);
           
-          // -- CASE 1: MATCHES FOUND --
+          // Variable local para rastrear la vida en tiempo real dentro de este ciclo
+          let liveHp = enemy.currentHp;
+
+          // -- CASO 1: HAY COINCIDENCIAS --
           if (groups.length > 0) {
               const tileCounts = new Map<string, number>();
               groups.forEach(g => g.ids.forEach(id => tileCounts.set(id, (tileCounts.get(id) || 0) + 1)));
+              
+              // Lógica de intersecciones (Bombas, T, L)
               const intersectionIds = new Set<string>();
               tileCounts.forEach((count, id) => { if (count > 1) intersectionIds.add(id); });
 
@@ -293,24 +318,23 @@ const App: React.FC = () => {
               });
 
               const allIdsForGravity = new Set<string>();
-              // We will use this to accumulate IDs for gravity, but for unfreezing we handle it per group for sync
               const accumulatedMatchedIds = new Set<string>(); 
               const accumulatedUnfrozenIds = new Set<string>();
 
               let localCombo = comboRef.current;
-              let currentEnemyHp = enemy.currentHp;
-              // Removed bossDefeatedThisLoop to allow combos to continue even if HP < 0
 
               for (const group of groupsToProcess) {
-                // If message appeared, break loop to pause, will resume later
                 if (showFinishMessage) break;
+
+                // Si ya matamos al enemigo en un paso anterior del bucle, paramos efectos visuales innecesarios
+                // pero terminamos de procesar el tablero para que caigan las fichas
+                const isAlreadyDead = liveHp <= 0;
 
                 const attacker = team.find(m => m.id === group.type);
                 const size = group.ids.length; 
                 
-                // Identify IDs in this specific group
+                // Procesar IDs
                 const groupIdsToUnfreeze = new Set<string>();
-                
                 group.ids.forEach(id => {
                     const tile = currentBoard.find(t => t.id === id);
                     if (tile?.status === 'ice') {
@@ -321,40 +345,43 @@ const App: React.FC = () => {
                     }
                     accumulatedMatchedIds.add(id);
                 });
-                
                 group.idsToDestroy?.forEach(id => {
                     allIdsForGravity.add(id);
                     accumulatedMatchedIds.add(id);
                 });
 
-                // ALWAYS show damage visuals if there is an attacker, even if boss is dead (Extra Combo)
+                // CÁLCULO DE DAÑO
                 if (attacker) {
                     setSkillCharges(prev => ({ ...prev, [attacker.id]: Math.min(attacker.skillCost, (prev[attacker.id] || 0) + size) }));
+                    
                     const baseAttack = 100;
                     let dmg = baseAttack * (1 + (size - 3) * 0.5);
                     if (TYPE_CHART[attacker.type].includes(enemy.type)) dmg *= 1.5;
+                    
+                    // Bonus de combo
                     if (localCombo > 20) dmg *= 2;
                     else if (localCombo > 8) dmg *= 1.5;
                     dmg = Math.floor(dmg);
-                    
-                    const colorMap: Record<string, string> = { 'Fuego': '#ef4444', 'Agua': '#3b82f6', 'Planta': '#22c55e', 'Eléctrico': '#eab308' };
-                    const centerTile = group.center; 
-                    addFloatingText(centerTile.x, centerTile.y, `${dmg}`, colorMap[attacker.type] || 'white');
 
-                    const projectileCount = 5;
-                    for(let i=0; i<projectileCount; i++) {
+                    // Solo hacemos efectos visuales de daño si el enemigo "sigue vivo" visualmente
+                    if (!isAlreadyDead) {
+                        const colorMap: Record<string, string> = { 'Fuego': '#ef4444', 'Agua': '#3b82f6', 'Planta': '#22c55e', 'Eléctrico': '#eab308' };
+                        const centerTile = group.center; 
+                        addFloatingText(centerTile.x, centerTile.y, `${dmg}`, colorMap[attacker.type] || 'white');
+
+                        const projectileCount = 5;
+                        for(let i=0; i<projectileCount; i++) {
+                            setTimeout(() => {
+                                    fireProjectile(centerTile.x, centerTile.y, colorMap[attacker.type] || 'white');
+                            }, i * 40);
+                        }
+
+                        // Aplicar daño REAL al estado y a la variable local
                         setTimeout(() => {
-                                fireProjectile(centerTile.x, centerTile.y, colorMap[attacker.type] || 'white');
-                        }, i * 40);
-                    }
-
-                    setTimeout(() => {
-                            // Apply damage logic regardless of local HP state to ensure kill is registered
-                            if (dmg > 0) applyDamage(dmg);
-                    }, 500 + (projectileCount * 40));
-                    
-                    if (currentEnemyHp > 0) {
-                        currentEnemyHp -= dmg;
+                                if (dmg > 0) applyDamage(dmg);
+                        }, 500 + (projectileCount * 40));
+                        
+                        liveHp -= dmg; // Actualizamos la variable local para saber que murió AHORA MISMO
                     }
                 }
                 
@@ -363,33 +390,24 @@ const App: React.FC = () => {
                 setComboCount(localCombo);
                 soundManager.playMatch(localCombo);
                 
-                // Update Board: Match tiles AND Unfreeze tiles simultaneously
+                // Actualizar tablero visualmente (Matches)
                 setBoard(prev => prev.map(t => {
                     if (accumulatedMatchedIds.has(t.id)) {
-                         // Fix: Do not mark ICE as matched to prevent pop-zoom animation
                          if (t.status === 'ice') return t;
                          return { ...t, isMatched: true };
                     }
-                    // THAW ICE HERE: If this tile is in the group to unfreeze, set it to normal NOW
                     if (groupIdsToUnfreeze.has(t.id) || accumulatedUnfrozenIds.has(t.id)) {
                         return { ...t, status: 'normal' };
                     }
                     return t;
                 }));
 
-                // Fast gameplay speed
                 await new Promise(r => setTimeout(r, 250));
               }
               
-              if (showFinishMessage) {
-                  isEvaluatorBusyRef.current = false;
-                  return;
-              }
-              
+              // --- FASE DE CAÍDA (Gravity) ---
               await new Promise(r => setTimeout(r, 200)); 
 
-              // We already unfroze tiles in the loop, but we need to pass a clean state to gravity
-              // Ensuring all unfrozen tiles are marked normal for gravity calc
               const boardWithUnfrozen = currentBoard.map(t => {
                   if (accumulatedUnfrozenIds.has(t.id)) return { ...t, status: 'normal' as const, isMatched: false };
                   return t;
@@ -398,13 +416,25 @@ const App: React.FC = () => {
               const boardAfterFall = applyGravity(boardWithUnfrozen, Array.from(allIdsForGravity), team);
               setBoard(boardAfterFall);
               
-              return;
+              // IMPORTANTE: Si liveHp (nuestra variable local) llegó a 0, NO esperamos al siguiente ciclo.
+              // Forzamos la verificación de victoria AHORA.
+              if (liveHp <= 0) {
+                   setTimeout(() => evaluateBoardState(), 100); // Llamada recursiva rápida para que entre en el Caso 2 inmediatamente
+              }
+              
+              return; 
           }
 
-          // -- CASE 2: NO MATCHES (Stable State) --
-          // VICTORY CHECK: Now we only trigger victory if board is stable AND boss is dead
-          if (enemy.currentHp <= 0) {
-              // Trigger "YA ESTÁ" only once when we settle
+          // -- CASO 2: NO HAY MÁS COINCIDENCIAS (Estado Estable) --
+
+          // VICTORIA CHECK (Usamos liveHp o enemy.currentHp, lo que sea menor)
+          const effectiveHp = Math.min(liveHp, enemy.currentHp);
+          
+          if (effectiveHp <= 0) {
+              setComboCount(0); // Apagar luces
+              comboRef.current = 0;
+              setHighlightedTileIds([]); 
+
               if (!finishTriggeredRef.current) {
                    finishTriggeredRef.current = true;
                    setShowFinishMessage(true);
@@ -416,19 +446,15 @@ const App: React.FC = () => {
               return;
           }
 
-          // Reset combo logic
-          if (comboRef.current > 0 || comboCount > 0) {
-              comboRef.current = 0; 
-              // Faster fade out (500ms) to avoid "stuck" feeling
-              setTimeout(() => setComboCount(0), 500);
-          }
-
-          // --- INTERFERENCE EXECUTION ---
-          // It only happens when board is stable AND pending flag is set
-          if (pendingInterference && enemy.currentHp > 0) {
-              setPendingInterference(false); // consume flag
+          // INTERFERENCIA
+          if (pendingInterference && effectiveHp > 0) {
+              setPendingInterference(false); 
               setBossAttacking(true);
               soundManager.playThrow();
+              
+              // Limpiar combo visual antes de interferencia
+              setComboCount(0);
+              comboRef.current = 0;
               
               setTimeout(() => {
                   const interferedBoard = applyInterference(currentBoard, enemy.type);
@@ -437,32 +463,30 @@ const App: React.FC = () => {
                   setTimeout(() => {
                       setBoardShake(false);
                       setBossAttacking(false);
-                      // After interference, we MUST check matches again
-                      // but setIsProcessing is false? No, keep it true or let handleBoardSettled pick it up
-                      // handleBoardSettled will trigger evaluate again.
                   }, 300);
               }, 600);
-              
-              // We return here, keeping isProcessing=true until interference settles
               return;
           }
 
+          // FIN DE TURNO (Devolver control)
           let nextBoard = currentBoard;
           
           if (!hasPossibleMoves(nextBoard)) {
               setIsResettingBoard(true);
+              setComboCount(0);
               setTimeout(() => {
                   setBoard(createBoard(team));
                   setIsResettingBoard(false);
                   setIsProcessing(false);
               }, 1000);
           } else {
-              // Unlock input
+              // AQUÍ: Si llegamos al final y el enemigo vive, soltamos el control
               setIsProcessing(false);
+              // El useEffect que añadimos arriba se encargará de limpiar el comboCount si quedó sucio
           }
 
-          // GAME OVER CHECK - Only if Enemy is ALIVE
-          if (movesLeft <= 0 && enemy.currentHp > 0) {
+          // GAME OVER
+          if (movesLeft <= 0 && effectiveHp > 0) {
               setAppState('gameover');
               soundManager.playLose();
           }
@@ -470,6 +494,7 @@ const App: React.FC = () => {
       } catch(e) {
           console.error("Board Error:", e);
           setIsProcessing(false);
+          setComboCount(0);
       } finally {
           isEvaluatorBusyRef.current = false;
       }
@@ -483,11 +508,16 @@ const App: React.FC = () => {
   };
 
   const handleVictorySequence = async () => {
+      // Asegurar limpieza visual una última vez
+      setComboCount(0);
+      comboRef.current = 0;
+      setHighlightedTileIds([]);
+      
       setIsDefeatedAnim(true);
       await new Promise(r => setTimeout(r, 1500));
+      
       setIsProcessing(false);
-      setComboCount(0); // Reset darkness
-      comboRef.current = 0;
+      
       if (isFinalBossMode) setAppState('victory');
       else if (collection.some(m => m.name === enemy.name)) advanceLevel();
       else setAppState('capture');
@@ -930,7 +960,7 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="w-full max-w-md px-4 mb-2 z-10 relative mx-auto" ref={bossRef}>
-                    <BossCard boss={enemy} shake={bossShake} damageTaken={lastDamage} isDefeated={isDefeatedAnim} hitEffect={hitEffect} isAttacking={bossAttacking} />
+                    <BossCard key={enemy.id} boss={enemy} shake={bossShake} damageTaken={lastDamage} isDefeated={isDefeatedAnim} hitEffect={hitEffect} isAttacking={bossAttacking} />
                     
                     {comboCount >= 2 && (
                         <div className="absolute top-1/2 right-6 transform -translate-y-1/2 z-50 flex flex-col items-center animate-in zoom-in duration-300 pointer-events-none">
