@@ -129,7 +129,11 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               // Detect Ice Break (Ice -> Normal)
               if (prev.status === 'ice' && tile.status === 'normal') {
                   emitParticles(tile.x, tile.y, 'ice');
-                  // KEY FIX: Prevent the match animation block below from running for this tile
+                  
+                  // Visual Trick: Start slightly higher to simulate a small drop
+                  // This gives the "no ground" feeling without changing the ID
+                  newAnim[tile.id].y = tile.y - 0.5;
+                  
                   newAnim[tile.id].matchStartTime = undefined; 
                   newAnim[tile.id].interferenceStartTime = undefined;
                   newAnim[tile.id].scaleX = 1;

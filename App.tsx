@@ -9,7 +9,7 @@ import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_W
 import { createBoard, findMatches, applyGravity, applyInterference, MatchGroup, hasPossibleMoves } from './utils/gameLogic';
 import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS, TYPE_PROJECTILE_ICONS } from './constants';
 import { soundManager } from './utils/sound';
-import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2, Save, AlertTriangle } from 'lucide-react';
+import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2, Save, AlertTriangle, Trash2 } from 'lucide-react';
 
 const SAVE_KEY_DATA = 'MONSTEMOJIS_SAVE_DATA';
 const SAVE_KEY_COLLECTION = 'MONSTEMOJIS_COLLECTION';
@@ -145,33 +145,24 @@ const App: React.FC = () => {
   };
 
   const saveGameAndQuit = () => {
+      // Logic only allows saving in team_select now, but we keep the structure generic
       const data = {
           level,
           movesLeft,
           team,
           levelPlan,
-          nextPreviewEnemy: appState === 'playing' ? enemy : nextPreviewEnemy // If playing, save current enemy status? 
-          // Note: Saving mid-battle is complex due to board state. 
-          // Simplified: We save "Start of Level" state or "Team Select" state.
-          // If in battle, we essentially save the fact you are at this level, but reset the board.
+          nextPreviewEnemy // Safe to save as we are in menu
       };
       
-      // If we are mid-battle, we reset the HP of the enemy for the save to be fair (or penalized), 
-      // but to keep it simple and fair for "Suspend", we save the state 'as is' for the level wrapper.
-      // We will reload into Team Select screen for that level.
-      if (appState === 'playing') {
-           // We save the CURRENT level configuration, but player restarts the fight.
-           // To prevent abuse, maybe we should save movesLeft? 
-           // Implementation: Save current 'movesLeft' and 'enemy' (full HP) to restart fight?
-           // Simplest for Marathon: Save progress up to the current level number.
-           // User restarts the level from team select.
-           data.nextPreviewEnemy = { ...enemy, currentHp: enemy.maxHp }; 
-      }
-
       localStorage.setItem(SAVE_KEY_DATA, JSON.stringify(data));
       setAppState('menu');
       setShowQuitConfirmation(false);
       showToast("Progreso guardado");
+  };
+
+  const quitWithoutSaving = () => {
+      setAppState('menu');
+      setShowQuitConfirmation(false);
   };
 
   const showToast = (msg: string) => {
@@ -673,13 +664,13 @@ const App: React.FC = () => {
          const ice = newBoard.filter(t => t.status === 'ice');
          const targets = ice.sort(() => 0.5 - Math.random()).slice(0, amount);
          // CHANGE: Ice melts to normal.
-         // KEY FIX: We change the ID to include 'spawn' so the renderer treats it as a new falling tile
+         // FIX: Keep ID the same to prevent React key thrashing and game freeze.
+         // Board.tsx will handle the "falling" visual logic based on status change.
          targets.forEach(t => {
              highlightedIds.push(t.id);
              newBoard = newBoard.map(tile => {
                  if (tile.id === t.id) {
-                     // Using 'spawn' prefix triggers the drop-in animation in Board.tsx
-                     return { ...tile, status: 'normal', id: `spawn_melt_${tile.x}_${tile.y}_${Date.now()}` };
+                     return { ...tile, status: 'normal' };
                  }
                  return tile;
              });
@@ -736,6 +727,7 @@ const App: React.FC = () => {
          const changedTile = newBoard.find(nt => nt.x === t.x && nt.y === t.y); // Match by pos as ID might have changed
          if (changedTile && changedTile.id !== t.id) return changedTile; // ID changed (Ice melt)
          if (changedTile && changedTile.monsterId !== t.monsterId) return changedTile; // Type converted
+         if (changedTile && changedTile.status !== t.status) return changedTile; // Status Changed (Ice melt)
          
          return t;
      }));
@@ -1090,33 +1082,63 @@ const App: React.FC = () => {
       {showQuitConfirmation && (
         <div className="absolute inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
             <div className="bg-slate-800 p-6 rounded-2xl border border-slate-600 max-w-sm w-full text-center shadow-2xl animate-in zoom-in">
-                <h3 className="text-2xl font-black text-white mb-6">Pausa</h3>
-                <div className="flex flex-col gap-3">
-                    <button 
-                        onClick={() => { soundManager.playButton(); saveGameAndQuit(); }} 
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg"
-                    >
-                        <Save size={20} />
-                        Guardar y Salir
-                    </button>
-                    
-                    <button 
-                        onClick={() => { soundManager.playButton(); setAppState('menu'); setShowQuitConfirmation(false); }} 
-                        className="bg-red-600 hover:bg-red-500 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg"
-                    >
-                        <LogOut size={20} />
-                        Salir sin Guardar
-                    </button>
-                    
-                    <div className="h-px bg-slate-700 my-2"></div>
+                {appState === 'team_select' ? (
+                     // SAVE MENU (Only available in Team Select)
+                     <>
+                        <h3 className="text-2xl font-black text-white mb-6">Pausa</h3>
+                        <div className="flex flex-col gap-3">
+                            <button 
+                                onClick={() => { soundManager.playButton(); saveGameAndQuit(); }} 
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg"
+                            >
+                                <Save size={20} />
+                                Guardar y Salir
+                            </button>
+                            
+                            <button 
+                                onClick={() => { soundManager.playButton(); quitWithoutSaving(); }} 
+                                className="bg-red-600 hover:bg-red-500 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg"
+                            >
+                                <LogOut size={20} />
+                                Salir sin Guardar
+                            </button>
+                            
+                            <div className="h-px bg-slate-700 my-2"></div>
 
-                    <button 
-                        onClick={() => { soundManager.playButton(); setShowQuitConfirmation(false); }} 
-                        className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-bold"
-                    >
-                        Cancelar
-                    </button>
-                </div>
+                            <button 
+                                onClick={() => { soundManager.playButton(); setShowQuitConfirmation(false); }} 
+                                className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-bold"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                     </>
+                ) : (
+                     // FORFEIT MENU (In Game)
+                     <>
+                        <h3 className="text-2xl font-black text-white mb-2">¿Abandonar?</h3>
+                        <p className="text-red-400 mb-6 font-bold flex flex-col items-center gap-2">
+                             <AlertTriangle size={32} />
+                             Perderás el progreso del Maratón.
+                        </p>
+                        <div className="flex flex-col gap-3">
+                            <button 
+                                onClick={() => { soundManager.playButton(); quitWithoutSaving(); }} 
+                                className="bg-red-600 hover:bg-red-500 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg"
+                            >
+                                <Trash2 size={20} />
+                                Salir (Reiniciar)
+                            </button>
+                            
+                            <button 
+                                onClick={() => { soundManager.playButton(); setShowQuitConfirmation(false); }} 
+                                className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-bold"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                     </>
+                )}
             </div>
         </div>
       )}
@@ -1129,13 +1151,10 @@ const App: React.FC = () => {
                       <Save size={32} className="text-white" />
                   </div>
                   <h2 className="text-3xl font-black text-white mb-4">Modo Maratón</h2>
-                  <p className="text-slate-300 text-lg mb-6 leading-relaxed">
-                      Este es un desafío de resistencia. Tu progreso se puede guardar.
-                  </p>
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-yellow-500/30 mb-8 text-left flex gap-3">
                       <AlertTriangle className="text-yellow-500 flex-shrink-0" />
                       <p className="text-sm text-yellow-100">
-                          Recuerda usar el botón de <span className="font-bold">Salir/Pausa</span> para <span className="font-bold underline decoration-yellow-500">GUARDAR</span> tu progreso antes de irte, o perderás tus datos.
+                          Solo puedes guardar el progreso en el <span className="font-bold">Menú de Selección</span> (entre combates). Si sales durante una batalla, perderás el progreso.
                       </p>
                   </div>
                   <button 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Boss, ElementType } from '../types';
-import { ChevronRight, ChevronLeft, ArrowLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ArrowLeft, Save } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 import { getLevelBackground, TYPE_PASTELS, TYPE_ICONS } from '../constants';
 
@@ -158,12 +158,16 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
             {/* Lighter overlay */}
             <div className="absolute inset-0 bg-slate-900/40 pointer-events-none"></div>
 
-            {/* BACK TO MENU BUTTON */}
+            {/* BACK / SAVE BUTTON */}
             <button 
                 onClick={() => { soundManager.playButton(); onBackToMenu(); }} 
-                className="absolute top-4 left-4 z-50 p-3 bg-slate-800/80 rounded-full border border-slate-600 text-slate-300 hover:bg-red-900/80 hover:text-white hover:border-red-500 shadow-lg backdrop-blur-sm transition-all active:scale-95"
+                className="absolute top-4 left-4 z-50 px-3 py-2 bg-slate-800/80 rounded-full border border-slate-600 text-slate-300 hover:bg-emerald-900/80 hover:text-white hover:border-emerald-500 shadow-lg backdrop-blur-sm transition-all active:scale-95 flex items-center gap-2"
             >
-                <ArrowLeft size={20} />
+                <div className="relative">
+                    <ArrowLeft size={20} />
+                </div>
+                <div className="w-px h-4 bg-slate-500"></div>
+                <Save size={18} />
             </button>
 
             <div className="relative z-10 w-full flex flex-col items-center flex-1 overflow-hidden max-w-xl mx-auto">

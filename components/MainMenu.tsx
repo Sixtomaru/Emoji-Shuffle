@@ -1,6 +1,6 @@
 import React from 'react';
 import { Boss } from '../types';
-import { Play, Skull, Book, Save } from 'lucide-react';
+import { Play, Skull, Book, ChevronsRight } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 import { MONSTER_DB } from '../constants';
 
@@ -37,7 +37,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, colle
                     `}
                 >
                     <div className={`bg-gradient-to-br text-white p-2 rounded-full group-hover:rotate-12 transition-transform shadow-lg ${hasSaveGame ? 'from-amber-500 to-orange-600' : 'from-red-500 to-pink-600'}`}>
-                        {hasSaveGame ? <Save fill="currentColor" size={24} /> : <Play fill="currentColor" size={24} />}
+                        {hasSaveGame ? <ChevronsRight fill="currentColor" size={24} /> : <Play fill="currentColor" size={24} />}
                     </div>
                     {hasSaveGame ? "CONTINUAR MARATÓN" : "MODO MARATÓN"}
                 </button>
