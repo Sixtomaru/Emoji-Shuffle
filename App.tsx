@@ -9,14 +9,24 @@ import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_W
 import { createBoard, findMatches, applyGravity, applyInterference, MatchGroup, hasPossibleMoves } from './utils/gameLogic';
 import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS, TYPE_PROJECTILE_ICONS } from './constants';
 import { soundManager } from './utils/sound';
-import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2 } from 'lucide-react';
+import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2, Save, AlertTriangle } from 'lucide-react';
+
+const SAVE_KEY_DATA = 'MONSTEMOJIS_SAVE_DATA';
+const SAVE_KEY_COLLECTION = 'MONSTEMOJIS_COLLECTION';
+const SAVE_KEY_TUTORIAL = 'MONSTEMOJIS_TUTORIAL_SEEN';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<GameState['status']>('menu');
   const [level, setLevel] = useState(1);
   const [movesLeft, setMovesLeft] = useState(INITIAL_MOVES);
   const [movesAtStart, setMovesAtStart] = useState(INITIAL_MOVES);
-  const [collection, setCollection] = useState<Boss[]>([MONSTER_DB[0], MONSTER_DB[1], MONSTER_DB[2], MONSTER_DB[3]]);
+  
+  // Load collection from local storage or default
+  const [collection, setCollection] = useState<Boss[]>(() => {
+      const saved = localStorage.getItem(SAVE_KEY_COLLECTION);
+      return saved ? JSON.parse(saved) : [MONSTER_DB[0], MONSTER_DB[1], MONSTER_DB[2], MONSTER_DB[3]];
+  });
+
   const [team, setTeam] = useState<Boss[]>([MONSTER_DB[0], MONSTER_DB[1], MONSTER_DB[2], MONSTER_DB[3]]);
   const [isFinalBossMode, setIsFinalBossMode] = useState(false);
   const [levelPlan, setLevelPlan] = useState<Boss[]>([]);
@@ -59,6 +69,8 @@ const App: React.FC = () => {
   
   const [viewingMonster, setViewingMonster] = useState<Boss | null>(null);
   const [showQuitConfirmation, setShowQuitConfirmation] = useState(false);
+  const [showMarathonTutorial, setShowMarathonTutorial] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const bossRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -66,12 +78,17 @@ const App: React.FC = () => {
   const comboRef = useRef(0);
   const boardRefState = useRef<TileData[]>([]); 
   const isEvaluatorBusyRef = useRef(false); 
-  const finishTriggeredRef = useRef(false); // Prevents multiple "YA ESTÁ"
+  const finishTriggeredRef = useRef(false); 
 
   useEffect(() => {
       boardRefState.current = board;
   }, [board]);
   
+  // Save collection whenever it changes
+  useEffect(() => {
+      localStorage.setItem(SAVE_KEY_COLLECTION, JSON.stringify(collection));
+  }, [collection]);
+
   // Resume game loop after finish message disappears
   useEffect(() => {
       if (!showFinishMessage && finishTriggeredRef.current) {
@@ -100,9 +117,82 @@ const App: React.FC = () => {
       return { ...baseEnemy, maxHp: scaledHp, currentHp: scaledHp };
   };
 
-  const handleStartArcade = () => {
+  const hasSaveGame = () => {
+      return !!localStorage.getItem(SAVE_KEY_DATA);
+  };
+
+  const loadGame = () => {
+      try {
+          const raw = localStorage.getItem(SAVE_KEY_DATA);
+          if (raw) {
+              const data = JSON.parse(raw);
+              setLevel(data.level);
+              setMovesLeft(data.movesLeft);
+              setMovesAtStart(data.movesLeft); // Approximate
+              setTeam(data.team);
+              setLevelPlan(data.levelPlan);
+              setNextPreviewEnemy(data.nextPreviewEnemy);
+              
+              // DELETE SAVE ON LOAD (Suspend feature)
+              localStorage.removeItem(SAVE_KEY_DATA);
+              
+              setAppState('team_select');
+              showToast("Partida cargada");
+          }
+      } catch (e) {
+          console.error("Failed to load save", e);
+      }
+  };
+
+  const saveGameAndQuit = () => {
+      const data = {
+          level,
+          movesLeft,
+          team,
+          levelPlan,
+          nextPreviewEnemy: appState === 'playing' ? enemy : nextPreviewEnemy // If playing, save current enemy status? 
+          // Note: Saving mid-battle is complex due to board state. 
+          // Simplified: We save "Start of Level" state or "Team Select" state.
+          // If in battle, we essentially save the fact you are at this level, but reset the board.
+      };
+      
+      // If we are mid-battle, we reset the HP of the enemy for the save to be fair (or penalized), 
+      // but to keep it simple and fair for "Suspend", we save the state 'as is' for the level wrapper.
+      // We will reload into Team Select screen for that level.
+      if (appState === 'playing') {
+           // We save the CURRENT level configuration, but player restarts the fight.
+           // To prevent abuse, maybe we should save movesLeft? 
+           // Implementation: Save current 'movesLeft' and 'enemy' (full HP) to restart fight?
+           // Simplest for Marathon: Save progress up to the current level number.
+           // User restarts the level from team select.
+           data.nextPreviewEnemy = { ...enemy, currentHp: enemy.maxHp }; 
+      }
+
+      localStorage.setItem(SAVE_KEY_DATA, JSON.stringify(data));
+      setAppState('menu');
+      setShowQuitConfirmation(false);
+      showToast("Progreso guardado");
+  };
+
+  const showToast = (msg: string) => {
+      setToastMessage(msg);
+      setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleStartArcade = (isContinue: boolean) => {
       enterFullscreen();
       setIsFinalBossMode(false);
+
+      if (isContinue && hasSaveGame()) {
+          loadGame();
+          return;
+      }
+      
+      // Check Tutorial
+      if (!localStorage.getItem(SAVE_KEY_TUTORIAL)) {
+          setShowMarathonTutorial(true);
+      }
+
       const fixedBossIds = ["m010", "m020", "m030"];
       const nonBosses = MONSTER_DB.filter(m => !fixedBossIds.includes(m.id));
       for (let i = nonBosses.length - 1; i > 0; i--) {
@@ -150,15 +240,15 @@ const App: React.FC = () => {
       setAppState('gallery');
   };
 
-  const handleQuitToMenu = () => {
+  const handleQuitRequest = () => {
       soundManager.playButton();
       setShowQuitConfirmation(true);
   };
 
-  const confirmQuit = () => {
+  const closeTutorial = () => {
       soundManager.playButton();
-      setShowQuitConfirmation(false);
-      setAppState('menu');
+      localStorage.setItem(SAVE_KEY_TUTORIAL, 'true');
+      setShowMarathonTutorial(false);
   };
 
   const startLevel = () => {
@@ -189,6 +279,7 @@ const App: React.FC = () => {
       setCaptureCaught(caught);
       if (caught) {
           if (!collection.find(m => m.name === enemy.name)) {
+             // Saving logic is handled by useEffect on [collection]
              setCollection(prev => [...prev, { ...enemy, currentHp: enemy.maxHp, id: enemy.id + '_caught_' + Date.now() }]);
           }
           setAppState('captured_info');
@@ -581,10 +672,17 @@ const App: React.FC = () => {
      else if (monster.skillType === 'clear_ice') {
          const ice = newBoard.filter(t => t.status === 'ice');
          const targets = ice.sort(() => 0.5 - Math.random()).slice(0, amount);
-         // CHANGE: Ice melts to normal, does NOT disappear (no void)
+         // CHANGE: Ice melts to normal.
+         // KEY FIX: We change the ID to include 'spawn' so the renderer treats it as a new falling tile
          targets.forEach(t => {
              highlightedIds.push(t.id);
-             newBoard = newBoard.map(tile => tile.id === t.id ? { ...tile, status: 'normal' } : tile);
+             newBoard = newBoard.map(tile => {
+                 if (tile.id === t.id) {
+                     // Using 'spawn' prefix triggers the drop-in animation in Board.tsx
+                     return { ...tile, status: 'normal', id: `spawn_melt_${tile.x}_${tile.y}_${Date.now()}` };
+                 }
+                 return tile;
+             });
          });
      }
      else if (monster.skillType === 'clear_steel') {
@@ -628,7 +726,6 @@ const App: React.FC = () => {
      }
 
      // --- STEP 4: APPLY TO BOARD (Simulate "Move") ---
-     // We do NOT apply gravity here. We set the state and let evaluateBoardState do it.
      
      setBoard(prev => prev.map(t => {
          // Case A: Destruction Skill (Mark as matched)
@@ -636,15 +733,13 @@ const App: React.FC = () => {
              return { ...t, isMatched: true }; 
          }
          // Case B: Conversion/Status Skill (Apply changes from calculation above)
-         // Note: newBoard already has the mapped changes for status/type
-         const changedTile = newBoard.find(nt => nt.id === t.id);
-         if (changedTile) return changedTile;
+         const changedTile = newBoard.find(nt => nt.x === t.x && nt.y === t.y); // Match by pos as ID might have changed
+         if (changedTile && changedTile.id !== t.id) return changedTile; // ID changed (Ice melt)
+         if (changedTile && changedTile.monsterId !== t.monsterId) return changedTile; // Type converted
          
          return t;
      }));
 
-     // Kickstart the game loop. The board now contains tiles with `isMatched: true` 
-     // or changed types that might form new matches.
      setTimeout(() => evaluateBoardState(), 100);
   };
 
@@ -675,11 +770,20 @@ const App: React.FC = () => {
 
       {appState === 'menu' && (
           <MainMenu 
-            onStartArcade={handleStartArcade} 
+            onStartArcade={() => handleStartArcade(true)} // Default to check continue
             onOpenGallery={handleOpenGallery} 
             collectionSize={collection.length}
             onStartFinalBoss={handleStartFinalBoss}
+            hasSaveGame={hasSaveGame()}
           />
+      )}
+
+      {/* GLOBAL TOAST */}
+      {toastMessage && (
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[100] bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold animate-in fade-in slide-in-from-top-4 flex items-center gap-2">
+              <CheckCircle2 size={20} />
+              {toastMessage}
+          </div>
       )}
       
       <div className="absolute inset-0 pointer-events-none z-[60] overflow-visible">
@@ -765,7 +869,7 @@ const App: React.FC = () => {
             nextLevel={level}
             nextEnemy={nextPreviewEnemy} 
             movesLeft={movesLeft} 
-            onBackToMenu={handleQuitToMenu}
+            onBackToMenu={handleQuitRequest}
           />
       )}
       
@@ -829,7 +933,7 @@ const App: React.FC = () => {
 
                 <div className="w-full flex justify-between items-center px-4 pt-4 pb-2 z-20">
                     <button 
-                        onClick={handleQuitToMenu} 
+                        onClick={handleQuitRequest} 
                         disabled={enemy.currentHp <= 0}
                         className={`
                             bg-red-900/80 p-2 rounded-lg border border-red-700 text-red-200 transition-all
@@ -900,7 +1004,7 @@ const App: React.FC = () => {
 
                 <div className="flex-1 w-full relative flex flex-col justify-center items-center z-10" ref={boardRef}>
                     
-                    {/* SKILL ANNOUNCEMENT MESSAGE - MOVED INSIDE BOARD CONTAINER FOR CENTERING */}
+                    {/* SKILL ANNOUNCEMENT MESSAGE */}
                     {skillAnnouncement && (
                         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/80 px-8 py-6 rounded-2xl backdrop-blur-md border-2 border-white/30 animate-in zoom-in duration-300 shadow-2xl flex flex-col items-center">
                             <span className="text-white font-black text-2xl md:text-3xl text-center whitespace-nowrap drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
@@ -982,17 +1086,66 @@ const App: React.FC = () => {
           </>
       )}
 
+      {/* PAUSE / QUIT MODAL */}
       {showQuitConfirmation && (
         <div className="absolute inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
-            <div className="bg-slate-800 p-6 rounded-2xl border border-red-500/50 max-w-sm w-full text-center">
-                <h3 className="text-2xl font-black text-white mb-4">¿Abandonar?</h3>
-                <p className="text-slate-400 mb-6 text-sm">Se perderá el progreso actual.</p>
-                <div className="flex gap-4 justify-center">
-                    <button onClick={() => setShowQuitConfirmation(false)} className="bg-slate-700 text-white px-6 py-3 rounded-xl font-bold">Cancelar</button>
-                    <button onClick={confirmQuit} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold">Salir</button>
+            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-600 max-w-sm w-full text-center shadow-2xl animate-in zoom-in">
+                <h3 className="text-2xl font-black text-white mb-6">Pausa</h3>
+                <div className="flex flex-col gap-3">
+                    <button 
+                        onClick={() => { soundManager.playButton(); saveGameAndQuit(); }} 
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg"
+                    >
+                        <Save size={20} />
+                        Guardar y Salir
+                    </button>
+                    
+                    <button 
+                        onClick={() => { soundManager.playButton(); setAppState('menu'); setShowQuitConfirmation(false); }} 
+                        className="bg-red-600 hover:bg-red-500 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg"
+                    >
+                        <LogOut size={20} />
+                        Salir sin Guardar
+                    </button>
+                    
+                    <div className="h-px bg-slate-700 my-2"></div>
+
+                    <button 
+                        onClick={() => { soundManager.playButton(); setShowQuitConfirmation(false); }} 
+                        className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-bold"
+                    >
+                        Cancelar
+                    </button>
                 </div>
             </div>
         </div>
+      )}
+
+      {/* FIRST TIME TUTORIAL MODAL */}
+      {showMarathonTutorial && (
+          <div className="absolute inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
+              <div className="bg-slate-800 p-8 rounded-3xl border-2 border-indigo-500 max-w-md w-full text-center shadow-[0_0_50px_rgba(99,102,241,0.5)] animate-in slide-in-from-bottom-10">
+                  <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+                      <Save size={32} className="text-white" />
+                  </div>
+                  <h2 className="text-3xl font-black text-white mb-4">Modo Maratón</h2>
+                  <p className="text-slate-300 text-lg mb-6 leading-relaxed">
+                      Este es un desafío de resistencia. Tu progreso se puede guardar.
+                  </p>
+                  <div className="bg-slate-900/50 p-4 rounded-xl border border-yellow-500/30 mb-8 text-left flex gap-3">
+                      <AlertTriangle className="text-yellow-500 flex-shrink-0" />
+                      <p className="text-sm text-yellow-100">
+                          Recuerda usar el botón de <span className="font-bold">Salir/Pausa</span> para <span className="font-bold underline decoration-yellow-500">GUARDAR</span> tu progreso antes de irte, o perderás tus datos.
+                      </p>
+                  </div>
+                  <button 
+                    onClick={closeTutorial}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-indigo-500/40 transition-all"
+                  >
+                      ¡ENTENDIDO!
+                  </button>
+              </div>
+          </div>
       )}
 
       {appState === 'victory' && (

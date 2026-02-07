@@ -1,6 +1,6 @@
 import React from 'react';
 import { Boss } from '../types';
-import { Play, Skull, Book } from 'lucide-react';
+import { Play, Skull, Book, Save } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 import { MONSTER_DB } from '../constants';
 
@@ -9,9 +9,10 @@ interface MainMenuProps {
     onOpenGallery: () => void;
     collectionSize: number;
     onStartFinalBoss: () => void;
+    hasSaveGame?: boolean;
 }
 
-const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, collectionSize, onStartFinalBoss }) => {
+const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, collectionSize, onStartFinalBoss, hasSaveGame }) => {
     // Check if player has all regular monsters
     const isComplete = collectionSize >= MONSTER_DB.length;
 
@@ -30,12 +31,15 @@ const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, colle
             <div className="flex flex-col gap-4 w-full max-w-xs relative z-10">
                 <button 
                     onClick={() => { soundManager.playButton(); onStartArcade(); }}
-                    className="w-full bg-white/95 hover:bg-white text-slate-900 font-black text-xl py-4 rounded-2xl shadow-[0_0_30px_rgba(255,255,255,0.3)] hover:shadow-[0_0_40px_rgba(255,255,255,0.5)] active:scale-95 transition-all flex items-center justify-center gap-3 group border border-white/50 backdrop-blur"
+                    className={`
+                        w-full text-slate-900 font-black text-xl py-4 rounded-2xl shadow-[0_0_30px_rgba(255,255,255,0.3)] hover:shadow-[0_0_40px_rgba(255,255,255,0.5)] active:scale-95 transition-all flex items-center justify-center gap-3 group border border-white/50 backdrop-blur
+                        ${hasSaveGame ? 'bg-amber-100 hover:bg-amber-50' : 'bg-white/95 hover:bg-white'}
+                    `}
                 >
-                    <div className="bg-gradient-to-br from-red-500 to-pink-600 text-white p-2 rounded-full group-hover:rotate-12 transition-transform shadow-lg">
-                        <Play fill="currentColor" size={24} />
+                    <div className={`bg-gradient-to-br text-white p-2 rounded-full group-hover:rotate-12 transition-transform shadow-lg ${hasSaveGame ? 'from-amber-500 to-orange-600' : 'from-red-500 to-pink-600'}`}>
+                        {hasSaveGame ? <Save fill="currentColor" size={24} /> : <Play fill="currentColor" size={24} />}
                     </div>
-                    MODO MARATÓN
+                    {hasSaveGame ? "CONTINUAR MARATÓN" : "MODO MARATÓN"}
                 </button>
                 
                 {isComplete && (
