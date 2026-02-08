@@ -646,7 +646,13 @@ const App: React.FC = () => {
          applyDamage(dmg);
          addFloatingText(GRID_WIDTH/2, GRID_HEIGHT/2, `¡${dmg}!`, 'yellow', 2);
          
-         setTimeout(() => evaluateBoardState(), 400);
+         // SPECIAL CHECK: If nuke kills, prevent freeze by triggering win immediately if needed
+         if (enemy.currentHp - dmg <= 0) {
+              setEnemy(prev => ({...prev, currentHp: 0}));
+              setTimeout(() => handleVictorySequence(), 1000);
+         } else {
+              setTimeout(() => evaluateBoardState(), 400);
+         }
          return; 
      } 
 
@@ -663,9 +669,6 @@ const App: React.FC = () => {
      else if (monster.skillType === 'clear_ice') {
          const ice = newBoard.filter(t => t.status === 'ice');
          const targets = ice.sort(() => 0.5 - Math.random()).slice(0, amount);
-         // CHANGE: Ice melts to normal.
-         // FIX: Keep ID the same to prevent React key thrashing and game freeze.
-         // Board.tsx will handle the "falling" visual logic based on status change.
          targets.forEach(t => {
              highlightedIds.push(t.id);
              newBoard = newBoard.map(tile => {
@@ -682,16 +685,19 @@ const App: React.FC = () => {
          targets.forEach(t => tilesToRemove.push(t.id));
      }
      else if (monster.skillType === 'clear_random') {
+         // Updated: Hit ANY tile (Normal, Rock, Ice, Steel)
          const targets = newBoard.sort(() => 0.5 - Math.random()).slice(0, amount);
          targets.forEach(t => tilesToRemove.push(t.id));
      }
      else if (monster.skillType === 'clear_self') {
+         // Self clear still only targets self
          const selfTiles = newBoard.filter(t => t.monsterId === monster.id && t.status === 'normal');
          const targets = selfTiles.sort(() => 0.5 - Math.random()).slice(0, amount + 1);
          targets.forEach(t => tilesToRemove.push(t.id));
      }
      else if (monster.skillType === 'convert_type') {
-         const candidates = newBoard.filter(t => t.monsterId !== monster.id && t.status === 'normal');
+         // Updated: Convert ANY tile (Normal, Rock, Ice, Steel) that isn't already the monster
+         const candidates = newBoard.filter(t => t.monsterId !== monster.id);
          const targets = candidates.sort(() => 0.5 - Math.random()).slice(0, amount);
          targets.forEach(t => {
              highlightedIds.push(t.id);
@@ -700,7 +706,9 @@ const App: React.FC = () => {
                  monsterId: monster.id, 
                  type: monster.type, 
                  emoji: monster.emoji, 
-                 image: monster.image 
+                 image: monster.image,
+                 status: 'normal', // Force remove obstacles
+                 statusLife: undefined
              } : tile);
          });
      }
@@ -725,13 +733,16 @@ const App: React.FC = () => {
          }
          // Case B: Conversion/Status Skill (Apply changes from calculation above)
          const changedTile = newBoard.find(nt => nt.x === t.x && nt.y === t.y); // Match by pos as ID might have changed
-         if (changedTile && changedTile.id !== t.id) return changedTile; // ID changed (Ice melt)
-         if (changedTile && changedTile.monsterId !== t.monsterId) return changedTile; // Type converted
-         if (changedTile && changedTile.status !== t.status) return changedTile; // Status Changed (Ice melt)
-         
+         if (changedTile) {
+             // Detect changes in ID, Type or Status
+             if (changedTile.id !== t.id || changedTile.monsterId !== t.monsterId || changedTile.status !== t.status) {
+                 return changedTile;
+             }
+         }
          return t;
      }));
 
+     // Ensure gravity runs, even if skill was just Ice Melt (which doesn't create matches initially but might drop tiles)
      setTimeout(() => evaluateBoardState(), 100);
   };
 
@@ -1154,7 +1165,7 @@ const App: React.FC = () => {
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-yellow-500/30 mb-8 text-left flex gap-3">
                       <AlertTriangle className="text-yellow-500 flex-shrink-0" />
                       <p className="text-sm text-yellow-100">
-                          Solo puedes guardar el progreso en el <span className="font-bold">Menú de Selección</span> (entre combates). Si sales durante una batalla, perderás el progreso.
+                          Solo puedes guardar el progreso en el <span className="font-bold">Menú de Selección de Monstemojis</span> (entre combates). Si sales durante una batalla, perderás el progreso.
                       </p>
                   </div>
                   <button 

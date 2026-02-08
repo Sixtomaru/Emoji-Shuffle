@@ -1,6 +1,6 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Boss, ElementType } from '../types';
-import { ChevronRight, ChevronLeft, ArrowLeft, Save } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ArrowLeft, Save, Lock } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 import { getLevelBackground, TYPE_PASTELS, TYPE_ICONS } from '../constants';
 
@@ -30,7 +30,20 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     const [dragMonster, setDragMonster] = useState<Boss | null>(null);
     const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
     
+    const [isButtonLocked, setIsButtonLocked] = useState(true);
+    const [lockCountdown, setLockCountdown] = useState(3);
+
     const isTeamValid = currentTeam.length === 4;
+
+    useEffect(() => {
+        // Countdown timer for button lock
+        if (lockCountdown > 0) {
+            const timer = setTimeout(() => setLockCountdown(c => c - 1), 1000);
+            return () => clearTimeout(timer);
+        } else {
+            setIsButtonLocked(false);
+        }
+    }, [lockCountdown]);
 
     const handleImageError = (id: string) => {
         setImgErrors(prev => ({ ...prev, [id]: true }));
@@ -330,16 +343,23 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 {/* Fight Button */}
                 <button 
                     onClick={() => { soundManager.playButton(); onStart(); }}
-                    disabled={!isTeamValid}
+                    disabled={!isTeamValid || isButtonLocked}
                     className={`
-                        w-full max-w-sm py-4 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-[0_0_20px_rgba(0,0,0,0.5)] mb-2 border-2 border-white/20
-                        ${isTeamValid 
+                        w-full max-w-sm py-4 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-[0_0_20px_rgba(0,0,0,0.5)] mb-2 border-2 border-white/20 relative overflow-hidden
+                        ${isTeamValid && !isButtonLocked
                             ? 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white transform hover:scale-105 hover:shadow-[0_0_30px_rgba(34,197,94,0.6)]' 
                             : 'bg-slate-800 text-slate-500 cursor-not-allowed grayscale'
                         }
                     `}
                 >
-                    ¡A LUCHAR! <ChevronRight size={28} strokeWidth={3} />
+                    {isButtonLocked ? (
+                        <div className="flex items-center gap-2">
+                             <Lock size={20} className="animate-pulse" />
+                             <span>ESPERA... ({lockCountdown})</span>
+                        </div>
+                    ) : (
+                        <>¡A LUCHAR! <ChevronRight size={28} strokeWidth={3} /></>
+                    )}
                 </button>
             </div>
 

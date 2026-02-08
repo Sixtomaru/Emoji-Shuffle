@@ -130,9 +130,8 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               if (prev.status === 'ice' && tile.status === 'normal') {
                   emitParticles(tile.x, tile.y, 'ice');
                   
-                  // Visual Trick: Start slightly higher to simulate a small drop
-                  // This gives the "no ground" feeling without changing the ID
-                  newAnim[tile.id].y = tile.y - 0.5;
+                  // Visual Trick: Pop slightly up then drop to position
+                  newAnim[tile.id].y = tile.y - 0.2; 
                   
                   newAnim[tile.id].matchStartTime = undefined; 
                   newAnim[tile.id].interferenceStartTime = undefined;
