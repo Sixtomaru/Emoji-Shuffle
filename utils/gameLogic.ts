@@ -74,8 +74,8 @@ export const findMatches = (board: TileData[]): MatchResult => {
       }
   });
 
-  // Updated: Ice tiles cannot be part of a match until thawed
-  const isValidTile = (t: TileData | null) => t && t.status !== 'rock' && t.status !== 'steel' && t.status !== 'ice';
+  // Updated: Ice tiles ARE valid for matching (they trigger unfreeze)
+  const isValidTile = (t: TileData | null) => t && t.status !== 'rock' && t.status !== 'steel';
 
   const getAdjacentRocks = (tile: TileData): string[] => {
       const rockIds: string[] = [];
@@ -281,7 +281,7 @@ export const applyInterference = (board: TileData[], enemyType: ElementType): Ti
 export const hasPossibleMoves = (board: TileData[]): boolean => {
     const grid: (TileData | null)[][] = Array(GRID_WIDTH).fill(null).map(() => Array(GRID_HEIGHT).fill(null));
     board.forEach(t => {
-        // Updated check for moves: Ice also blocks swaps
+        // Ice blocks swaps
         if (t.status === 'normal') {
             grid[t.x][t.y] = t;
         }

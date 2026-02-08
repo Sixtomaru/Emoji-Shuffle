@@ -359,6 +359,9 @@ const App: React.FC = () => {
               let localCombo = comboRef.current;
               let currentEnemyHp = enemy.currentHp;
 
+              // TRACKER FOR UNFREEZE
+              let performedUnfreeze = false;
+
               for (const group of groupsToProcess) {
                 // If message appeared, break loop to pause, will resume later
                 if (showFinishMessage) break;
@@ -423,12 +426,14 @@ const App: React.FC = () => {
                 
                 // Update Board: Match tiles AND Unfreeze tiles simultaneously
                 setBoard(prev => prev.map(t => {
-                    if (accumulatedMatchedIds.has(t.id)) {
-                         if (t.status === 'ice') return t;
-                         return { ...t, isMatched: true };
-                    }
+                    // CRITICAL FIX: Prioritize unfreezing over matching to ensure ice melts before being considered for removal
                     if (groupIdsToUnfreeze.has(t.id) || accumulatedUnfrozenIds.has(t.id)) {
+                        performedUnfreeze = true; // Flag for re-evaluation
                         return { ...t, status: 'normal' };
+                    }
+                    if (accumulatedMatchedIds.has(t.id)) {
+                         if (t.status === 'ice') return t; // Redundant but safe
+                         return { ...t, isMatched: true };
                     }
                     return t;
                 }));
@@ -457,6 +462,14 @@ const App: React.FC = () => {
               const boardAfterFall = applyGravity(boardWithUnfrozen, Array.from(allIdsForGravity), team);
               setBoard(boardAfterFall);
               
+              if (performedUnfreeze) {
+                  // FORCE RE-EVALUATION:
+                  // If we unfroze tiles, they might not have moved position (so Board.tsx won't trigger onBoardSettled).
+                  // But they are now matching candidates. We MUST run the loop again.
+                  setTimeout(() => evaluateBoardState(), 350);
+                  return;
+              }
+
               return;
           }
           
@@ -496,12 +509,6 @@ const App: React.FC = () => {
               return;
           }
 
-          // Reset combo logic
-          if (comboRef.current > 0 || comboCount > 0) {
-              comboRef.current = 0; 
-              setTimeout(() => setComboCount(0), 500);
-          }
-
           // --- INTERFERENCE EXECUTION ---
           if (pendingInterference && enemy.currentHp > 0) {
               setPendingInterference(false); 
@@ -531,6 +538,11 @@ const App: React.FC = () => {
               }, 1000);
           } else {
               // Unlock input - THIS IS THE CRITICAL UNLOCK POINT
+              // RESET COMBO DISPLAY
+              if (comboCount > 0 || comboRef.current > 0) {
+                   setComboCount(0);
+                   comboRef.current = 0;
+              }
               setIsProcessing(false);
           }
 
@@ -778,7 +790,7 @@ const App: React.FC = () => {
      }));
 
      // Ensure gravity runs with a slight delay to allow state propagation
-     setTimeout(() => evaluateBoardState(), 200);
+     setTimeout(() => evaluateBoardState(), 350);
   };
 
   const addFloatingText = (x: number, y: number, text: string, color: string = 'white', scale: number = 1) => {
