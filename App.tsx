@@ -660,10 +660,11 @@ const App: React.FC = () => {
 
   const executeSkill = async (monster: Boss) => {
      if (skillCharges[monster.id] < monster.skillCost || enemy.currentHp <= 0) return;
+     
      soundManager.playButton();
      setShowSkillMenu(false);
      setSkillCharges(prev => ({...prev, [monster.id]: 0}));
-     setIsProcessing(true); // Lock the board
+     setIsProcessing(true);
      comboRef.current = 0; 
      soundManager.playBeam();
 
@@ -678,13 +679,15 @@ const App: React.FC = () => {
      setAnimatingSkillBoss(null);
 
      // --- STEP 3: LOGIC CALCULATION ---
+     // Usamos boardRefState.current para asegurar que calculamos sobre lo más actual
+     let currentBoardState = [...boardRefState.current];
+     
      let amount = 4;
      if (monster.skillCost >= 14) amount = 5;
      if (monster.skillCost >= 18) amount = 6;
      if (monster.skillCost >= 25) amount = 8;
      
      if (monster.skillType === 'nuke') {
-         // NUKE handles its own logic because it doesn't affect the board grid
          let dmg = 2000;
          if (monster.skillCost >= 25) dmg = 3500;
          fireProjectile(GRID_WIDTH/2, GRID_HEIGHT/2, 'yellow');
@@ -693,7 +696,6 @@ const App: React.FC = () => {
          applyDamage(dmg);
          addFloatingText(GRID_WIDTH/2, GRID_HEIGHT/2, `¡${dmg}!`, 'yellow', 2);
          
-         // SPECIAL CHECK: If nuke kills, prevent freeze by triggering win immediately if needed
          if (enemy.currentHp - dmg <= 0) {
               setEnemy(prev => ({...prev, currentHp: 0}));
               setTimeout(() => handleVictorySequence(), 1000);
@@ -705,58 +707,46 @@ const App: React.FC = () => {
 
      let tilesToRemove: string[] = [];
      let highlightedIds: string[] = [];
-     let newBoard = [...board];
-
+     
+     // NOTA: Usamos currentBoardState para buscar objetivos, no 'board' del closure
      // Identify targets
      if (monster.skillType === 'clear_rocks') {
-         const rocks = newBoard.filter(t => t.status === 'rock');
+         const rocks = currentBoardState.filter(t => t.status === 'rock');
          const targets = rocks.sort(() => 0.5 - Math.random()).slice(0, amount);
          targets.forEach(t => tilesToRemove.push(t.id));
      } 
      else if (monster.skillType === 'clear_ice') {
-         const ice = newBoard.filter(t => t.status === 'ice');
+         const ice = currentBoardState.filter(t => t.status === 'ice');
          const targets = ice.sort(() => 0.5 - Math.random()).slice(0, amount);
          targets.forEach(t => {
              highlightedIds.push(t.id);
-             newBoard = newBoard.map(tile => {
-                 if (tile.id === t.id) {
-                     return { ...tile, status: 'normal' };
-                 }
-                 return tile;
-             });
+             // Modificamos directamente el array temporal para cálculos subsiguientes si fuera necesario
+             // Pero el mapeo final lo haremos abajo
          });
      }
      else if (monster.skillType === 'clear_steel') {
-         const steel = newBoard.filter(t => t.status === 'steel');
+         const steel = currentBoardState.filter(t => t.status === 'steel');
          const targets = steel.sort(() => 0.5 - Math.random()).slice(0, amount);
          targets.forEach(t => tilesToRemove.push(t.id));
      }
      else if (monster.skillType === 'clear_random') {
-         // Updated: Hit ANY tile (Normal, Rock, Ice, Steel)
-         const targets = newBoard.sort(() => 0.5 - Math.random()).slice(0, amount);
+         const targets = currentBoardState.sort(() => 0.5 - Math.random()).slice(0, amount);
          targets.forEach(t => tilesToRemove.push(t.id));
      }
      else if (monster.skillType === 'clear_self') {
-         // Self clear still only targets self
-         const selfTiles = newBoard.filter(t => t.monsterId === monster.id && t.status === 'normal');
+         const selfTiles = currentBoardState.filter(t => t.monsterId === monster.id && t.status === 'normal');
          const targets = selfTiles.sort(() => 0.5 - Math.random()).slice(0, amount + 1);
          targets.forEach(t => tilesToRemove.push(t.id));
      }
-     else if (monster.skillType === 'convert_type') {
-         // Updated: Convert ANY tile (Normal, Rock, Ice, Steel) that isn't already the monster
-         const candidates = newBoard.filter(t => t.monsterId !== monster.id);
+     
+     // Para convert_type necesitamos saber a quiénes vamos a convertir antes de aplicar el mapa
+     let conversionTargets: string[] = [];
+     if (monster.skillType === 'convert_type') {
+         const candidates = currentBoardState.filter(t => t.monsterId !== monster.id);
          const targets = candidates.sort(() => 0.5 - Math.random()).slice(0, amount);
          targets.forEach(t => {
              highlightedIds.push(t.id);
-             newBoard = newBoard.map(tile => tile.id === t.id ? { 
-                 ...tile, 
-                 monsterId: monster.id, 
-                 type: monster.type, 
-                 emoji: monster.emoji, 
-                 image: monster.image,
-                 status: 'normal', // Force remove obstacles
-                 statusLife: undefined
-             } : tile);
+             conversionTargets.push(t.id);
          });
      }
 
@@ -772,24 +762,44 @@ const App: React.FC = () => {
      }
 
      // --- STEP 4: APPLY TO BOARD (Simulate "Move") ---
-     
-     setBoard(prev => prev.map(t => {
+     // Calculamos el nuevo tablero final AQUÍ MISMO
+     const finalBoard = currentBoardState.map(t => {
          // Case A: Destruction Skill (Mark as matched)
          if (tilesToRemove.includes(t.id)) {
              return { ...t, isMatched: true }; 
          }
-         // Case B: Conversion/Status Skill (Apply changes from calculation above)
-         const changedTile = newBoard.find(nt => nt.x === t.x && nt.y === t.y); // Match by pos as ID might have changed
-         if (changedTile) {
-             // Detect changes in ID, Type or Status
-             if (changedTile.id !== t.id || changedTile.monsterId !== t.monsterId || changedTile.status !== t.status) {
-                 return changedTile;
-             }
+         
+         // Case B: Clear Ice (Status change)
+         if (monster.skillType === 'clear_ice' && highlightedIds.includes(t.id) && !tilesToRemove.includes(t.id)) {
+             return { ...t, status: 'normal' as const };
          }
-         return t;
-     }));
 
-     // Ensure gravity runs with a slight delay to allow state propagation
+         // Case C: Conversion Skill
+         if (conversionTargets.includes(t.id)) {
+             return { 
+                 ...t, 
+                 monsterId: monster.id, 
+                 type: monster.type, 
+                 emoji: monster.emoji, 
+                 image: monster.image,
+                 status: 'normal' as const, 
+                 statusLife: undefined
+             };
+         }
+         
+         return t;
+     });
+
+     // 1. Actualizamos el estado visual
+     setBoard(finalBoard);
+     
+     // 2. CRÍTICO: Forzamos la actualización de la referencia inmediatamente.
+     // Esto asegura que cuando evaluateBoardState corra, vea los cambios.
+     boardRefState.current = finalBoard;
+
+     // 3. Llamamos al evaluador. 
+     // Al haber actualizado el Ref, findMatches encontrará los nuevos combos (por conversión)
+     // o los huecos (por isMatched) y aplicará la gravedad y combos.
      setTimeout(() => evaluateBoardState(), 350);
   };
 
