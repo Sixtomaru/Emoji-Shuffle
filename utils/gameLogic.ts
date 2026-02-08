@@ -74,7 +74,8 @@ export const findMatches = (board: TileData[]): MatchResult => {
       }
   });
 
-  const isValidTile = (t: TileData | null) => t && t.status !== 'rock' && t.status !== 'steel';
+  // Updated: Ice tiles cannot be part of a match until thawed
+  const isValidTile = (t: TileData | null) => t && t.status !== 'rock' && t.status !== 'steel' && t.status !== 'ice';
 
   const getAdjacentRocks = (tile: TileData): string[] => {
       const rockIds: string[] = [];
@@ -198,6 +199,7 @@ export const applyGravity = (
         for (let readPtr = GRID_HEIGHT - 1; readPtr >= 0; readPtr--) {
             const tile = colTiles.find(t => t.y === readPtr);
             
+            // Ice blocks gravity
             if (tile && tile.status === 'ice' && !idsToRemove.includes(tile.id)) {
                 nextBoard.push({ ...tile, isMatched: false }); 
                 writePtr = readPtr - 1; 
@@ -246,7 +248,6 @@ export const applyInterference = (board: TileData[], enemyType: ElementType): Ti
     const targets = board.filter(t => t.status === 'normal');
     if (targets.length === 0) return board;
 
-    // INCREASED INTERFERENCE COUNT: 3 to 6
     const count = Math.min(targets.length, Math.floor(Math.random() * 4) + 3);
     
     const shuffled = targets.sort(() => 0.5 - Math.random());
@@ -254,8 +255,6 @@ export const applyInterference = (board: TileData[], enemyType: ElementType): Ti
 
     return board.map(t => {
         if (affected.has(t.id)) {
-            // IMPORTANT: Create a NEW ID so the Board component sees it as a "new" tile
-            // and triggers the drop-in/zoom animation.
             const newId = `${t.id}_int_${Date.now()}`;
             
             if (type === 'ice') {
@@ -282,7 +281,8 @@ export const applyInterference = (board: TileData[], enemyType: ElementType): Ti
 export const hasPossibleMoves = (board: TileData[]): boolean => {
     const grid: (TileData | null)[][] = Array(GRID_WIDTH).fill(null).map(() => Array(GRID_HEIGHT).fill(null));
     board.forEach(t => {
-        if (t.status !== 'rock' && t.status !== 'steel') {
+        // Updated check for moves: Ice also blocks swaps
+        if (t.status === 'normal') {
             grid[t.x][t.y] = t;
         }
     });
