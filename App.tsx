@@ -78,7 +78,8 @@ const App: React.FC = () => {
   const comboRef = useRef(0);
   const boardRefState = useRef<TileData[]>([]); 
   const isEvaluatorBusyRef = useRef(false); 
-  const finishTriggeredRef = useRef(false); 
+  const finishTriggeredRef = useRef(false);
+  const victoryProcessedRef = useRef(false); // Prevents double level advance
 
   useEffect(() => {
       boardRefState.current = board;
@@ -261,6 +262,7 @@ const App: React.FC = () => {
       comboRef.current = 0;
       isEvaluatorBusyRef.current = false; 
       finishTriggeredRef.current = false;
+      victoryProcessedRef.current = false; // Reset lock
       setSkillAnnouncement(null);
       setAnimatingSkillBoss(null);
       setHighlightedTileIds([]);
@@ -280,6 +282,9 @@ const App: React.FC = () => {
   };
 
   const advanceLevel = () => {
+      // SECURITY: If already in team_select, do nothing to prevent double bonus
+      if (appState === 'team_select') return;
+
       if (isFinalBossMode) {
           soundManager.playWin();
           setAppState('victory'); 
@@ -454,8 +459,32 @@ const App: React.FC = () => {
               
               return;
           }
+          
+          // -- CASE 1.5: NO MATCHES, BUT CHECK FOR FLOATING TILES (Skills like Ice Melt) --
+          // Check if gravity is needed because a skill changed a status (e.g. Ice -> Normal) but didn't create a match
+          // We must ensure 'currentBoard' status is up to date.
+          const gravityBoard = applyGravity(currentBoard, [], team);
+          
+          let gravityNeeded = false;
+          // Robust check: Compare positions of non-matched tiles
+          for (let i = 0; i < currentBoard.length; i++) {
+              const t1 = currentBoard[i];
+              // Skip comparing matched tiles as they are gone
+              if (t1.isMatched) continue; 
+              
+              const t2 = gravityBoard.find(t => t.id === t1.id);
+              if (t2 && (t2.x !== t1.x || t2.y !== t1.y)) {
+                  gravityNeeded = true;
+                  break;
+              }
+          }
+          
+          if (gravityNeeded) {
+              setBoard(gravityBoard);
+              return; // Loop continues to animate the fall
+          }
 
-          // -- CASE 2: NO MATCHES (Stable State) --
+          // -- CASE 2: NO MATCHES & STABLE (Stable State) --
           if (enemy.currentHp <= 0) {
               if (!finishTriggeredRef.current) {
                    finishTriggeredRef.current = true;
@@ -526,11 +555,17 @@ const App: React.FC = () => {
   };
 
   const handleVictorySequence = async () => {
+      if (victoryProcessedRef.current) return;
+      
       setIsDefeatedAnim(true);
       await new Promise(r => setTimeout(r, 1500));
       setIsProcessing(false);
       setComboCount(0); // Reset darkness
       comboRef.current = 0;
+      
+      // LOCK: Prevent re-entry
+      victoryProcessedRef.current = true;
+
       if (isFinalBossMode) setAppState('victory');
       else if (collection.some(m => m.name === enemy.name)) advanceLevel();
       else setAppState('capture');
@@ -742,8 +777,8 @@ const App: React.FC = () => {
          return t;
      }));
 
-     // Ensure gravity runs, even if skill was just Ice Melt (which doesn't create matches initially but might drop tiles)
-     setTimeout(() => evaluateBoardState(), 100);
+     // Ensure gravity runs with a slight delay to allow state propagation
+     setTimeout(() => evaluateBoardState(), 200);
   };
 
   const addFloatingText = (x: number, y: number, text: string, color: string = 'white', scale: number = 1) => {

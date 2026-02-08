@@ -76,6 +76,8 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
   
   const isMovingRef = useRef(false);
   const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Double Security Timer Ref
+  const safetySettlementRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const [dragState, setDragState] = useState<{ id: string, startX: number, startY: number, currX: number, currY: number } | null>(null);
 
@@ -185,9 +187,22 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
       
       animState.current = newAnim;
       if (settleTimeoutRef.current) clearTimeout(settleTimeoutRef.current);
+      
+      // RESET SAFETY TIMER ON BOARD CHANGE
+      if (safetySettlementRef.current) clearTimeout(safetySettlementRef.current);
+      // If we are processing, set a safety timer to force settlement if visual logic gets stuck
+      if (isProcessing) {
+          safetySettlementRef.current = setTimeout(() => {
+              if (onBoardSettled) {
+                  // Force settlement
+                  onBoardSettled();
+              }
+          }, 1500); // 1.5s timeout usually enough for any animation
+      }
+
       isMovingRef.current = true; 
 
-  }, [board]);
+  }, [board, isProcessing]); // Added isProcessing dependency to re-arm timer
 
   useEffect(() => {
       const canvas = canvasRef.current;
@@ -575,6 +590,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
           if (isMovingRef.current && !globalIsMoving) {
               if (onBoardSettled && !settleTimeoutRef.current) {
                   settleTimeoutRef.current = setTimeout(() => {
+                      if (safetySettlementRef.current) clearTimeout(safetySettlementRef.current); // Clear safety if normal settled triggers
                       onBoardSettled();
                       settleTimeoutRef.current = null;
                   }, 50);
