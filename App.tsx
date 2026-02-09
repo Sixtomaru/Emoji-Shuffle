@@ -346,7 +346,6 @@ const App: React.FC = () => {
               });
 
               const allIdsForGravity = new Set<string>();
-              // We will use this to accumulate IDs for gravity, but for unfreezing we handle it per group for sync
               const accumulatedMatchedIds = new Set<string>(); 
               const accumulatedUnfrozenIds = new Set<string>();
               
@@ -358,9 +357,6 @@ const App: React.FC = () => {
 
               let localCombo = comboRef.current;
               let currentEnemyHp = enemy.currentHp;
-
-              // TRACKER FOR UNFREEZE
-              let performedUnfreeze = false;
 
               for (const group of groupsToProcess) {
                 // If message appeared, break loop to pause, will resume later
@@ -426,13 +422,12 @@ const App: React.FC = () => {
                 
                 // Update Board: Match tiles AND Unfreeze tiles simultaneously
                 setBoard(prev => prev.map(t => {
-                    // CRITICAL FIX: Prioritize unfreezing over matching to ensure ice melts before being considered for removal
+                    // Unfreeze prioritization
                     if (groupIdsToUnfreeze.has(t.id) || accumulatedUnfrozenIds.has(t.id)) {
-                        performedUnfreeze = true; // Flag for re-evaluation
                         return { ...t, status: 'normal' };
                     }
                     if (accumulatedMatchedIds.has(t.id)) {
-                         if (t.status === 'ice') return t; // Redundant but safe
+                         if (t.status === 'ice') return t;
                          return { ...t, isMatched: true };
                     }
                     return t;
@@ -462,27 +457,20 @@ const App: React.FC = () => {
               const boardAfterFall = applyGravity(boardWithUnfrozen, Array.from(allIdsForGravity), team);
               setBoard(boardAfterFall);
               
-              if (performedUnfreeze) {
-                  // FORCE RE-EVALUATION:
-                  // If we unfroze tiles, they might not have moved position (so Board.tsx won't trigger onBoardSettled).
-                  // But they are now matching candidates. We MUST run the loop again.
-                  setTimeout(() => evaluateBoardState(), 350);
-                  return;
-              }
-
+              // CRITICAL: Always re-evaluate after gravity, simulating the loop of a real move.
+              // This catches tiles that fall into place and form new matches.
+              setTimeout(() => evaluateBoardState(), 500);
+              
               return;
           }
           
-          // -- CASE 1.5: NO MATCHES, BUT CHECK FOR FLOATING TILES (Skills like Ice Melt) --
-          // Check if gravity is needed because a skill changed a status (e.g. Ice -> Normal) but didn't create a match
-          // We must ensure 'currentBoard' status is up to date.
+          // -- CASE 1.5: NO MATCHES, BUT CHECK FOR FLOATING TILES --
           const gravityBoard = applyGravity(currentBoard, [], team);
           
           let gravityNeeded = false;
-          // Robust check: Compare positions of non-matched tiles
+          // Check if gravity would change anything
           for (let i = 0; i < currentBoard.length; i++) {
               const t1 = currentBoard[i];
-              // Skip comparing matched tiles as they are gone
               if (t1.isMatched) continue; 
               
               const t2 = gravityBoard.find(t => t.id === t1.id);
@@ -494,7 +482,9 @@ const App: React.FC = () => {
           
           if (gravityNeeded) {
               setBoard(gravityBoard);
-              return; // Loop continues to animate the fall
+              // Force re-check after fall
+              setTimeout(() => evaluateBoardState(), 500);
+              return;
           }
 
           // -- CASE 2: NO MATCHES & STABLE (Stable State) --
@@ -522,6 +512,8 @@ const App: React.FC = () => {
                   setTimeout(() => {
                       setBoardShake(false);
                       setBossAttacking(false);
+                      // Force recheck just in case interference created a match by luck
+                      evaluateBoardState();
                   }, 300);
               }, 600);
               return;
@@ -560,9 +552,9 @@ const App: React.FC = () => {
   };
 
   const handleBoardSettled = () => {
-      // Resume loop if board stops moving
+      // Board.tsx callback still exists as a backup, but the main loop logic drives itself via setTimeout now
       if (isProcessing && !showFinishMessage) {
-          evaluateBoardState();
+          // evaluateBoardState(); // Disabled automatic call from here to avoid double-firing, relied on logic loop
       }
   };
 
@@ -649,6 +641,9 @@ const App: React.FC = () => {
             }
             return next;
         });
+        
+        // Start the logic loop
+        setTimeout(() => evaluateBoardState(), 300);
 
     } else {
         setBoard(tempBoard); 
@@ -800,7 +795,7 @@ const App: React.FC = () => {
      // 3. Llamamos al evaluador. 
      // Al haber actualizado el Ref, findMatches encontrará los nuevos combos (por conversión)
      // o los huecos (por isMatched) y aplicará la gravedad y combos.
-     setTimeout(() => evaluateBoardState(), 350);
+     setTimeout(() => evaluateBoardState(), 400);
   };
 
   const addFloatingText = (x: number, y: number, text: string, color: string = 'white', scale: number = 1) => {
