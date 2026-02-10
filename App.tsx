@@ -77,6 +77,9 @@ const App: React.FC = () => {
   
   const comboRef = useRef(0);
   const boardRefState = useRef<TileData[]>([]); 
+  const enemyRef = useRef<Boss>(MONSTER_DB[4]); // CRITICAL: Track enemy state for loop
+  const movesLeftRef = useRef(INITIAL_MOVES); // CRITICAL: Track moves for loop
+  const pendingInterferenceRef = useRef(false);
   const isEvaluatorBusyRef = useRef(false); 
   const finishTriggeredRef = useRef(false);
   const victoryProcessedRef = useRef(false); // Prevents double level advance
@@ -84,6 +87,14 @@ const App: React.FC = () => {
   useEffect(() => {
       boardRefState.current = board;
   }, [board]);
+  
+  useEffect(() => {
+      enemyRef.current = enemy;
+  }, [enemy]);
+
+  useEffect(() => {
+      movesLeftRef.current = movesLeft;
+  }, [movesLeft]);
   
   // Save collection whenever it changes
   useEffect(() => {
@@ -259,6 +270,7 @@ const App: React.FC = () => {
       setIsResettingBoard(false);
       setBossAttacking(false);
       setPendingInterference(false);
+      pendingInterferenceRef.current = false; // Reset Ref
       comboRef.current = 0;
       isEvaluatorBusyRef.current = false; 
       finishTriggeredRef.current = false;
@@ -322,7 +334,10 @@ const App: React.FC = () => {
       isEvaluatorBusyRef.current = true;
 
       try {
+          // USE REFS TO GET LATEST STATE IN RECURSIVE CALLS
+          const currentEnemy = enemyRef.current;
           const currentBoard = boardRefState.current;
+          
           const { groups } = findMatches(currentBoard);
           
           // DETECT MANUAL MATCHES (From Skills)
@@ -356,7 +371,7 @@ const App: React.FC = () => {
               });
 
               let localCombo = comboRef.current;
-              let currentEnemyHp = enemy.currentHp;
+              let currentEnemyHp = currentEnemy.currentHp; // Use ref hp
 
               for (const group of groupsToProcess) {
                 // If message appeared, break loop to pause, will resume later
@@ -389,7 +404,7 @@ const App: React.FC = () => {
                     setSkillCharges(prev => ({ ...prev, [attacker.id]: Math.min(attacker.skillCost, (prev[attacker.id] || 0) + size) }));
                     const baseAttack = 100;
                     let dmg = baseAttack * (1 + (size - 3) * 0.5);
-                    if (TYPE_CHART[attacker.type].includes(enemy.type)) dmg *= 1.5;
+                    if (TYPE_CHART[attacker.type].includes(currentEnemy.type)) dmg *= 1.5;
                     if (localCombo > 20) dmg *= 2;
                     else if (localCombo > 8) dmg *= 1.5;
                     dmg = Math.floor(dmg);
@@ -488,7 +503,8 @@ const App: React.FC = () => {
           }
 
           // -- CASE 2: NO MATCHES & STABLE (Stable State) --
-          if (enemy.currentHp <= 0) {
+          // USE REF TO CHECK HP VICTORY
+          if (currentEnemy.currentHp <= 0) {
               if (!finishTriggeredRef.current) {
                    finishTriggeredRef.current = true;
                    setShowFinishMessage(true);
@@ -500,19 +516,22 @@ const App: React.FC = () => {
           }
 
           // --- INTERFERENCE EXECUTION ---
-          if (pendingInterference && enemy.currentHp > 0) {
-              setPendingInterference(false); 
+          // FIX: Use ref to check for interference to avoid loop due to closure staleness
+          // AND Check current HP ref to prevent dead boss from attacking
+          if (pendingInterferenceRef.current && currentEnemy.currentHp > 0) {
+              pendingInterferenceRef.current = false; // Turn off immediately to prevent loop
+              setPendingInterference(false); // Update React state for consistency
               setBossAttacking(true);
               soundManager.playThrow();
               
               setTimeout(() => {
-                  const interferedBoard = applyInterference(currentBoard, enemy.type);
+                  const interferedBoard = applyInterference(boardRefState.current, currentEnemy.type);
                   setBoard(interferedBoard);
                   setBoardShake(true);
                   setTimeout(() => {
                       setBoardShake(false);
                       setBossAttacking(false);
-                      // Force recheck just in case interference created a match by luck
+                      // Force recheck to update valid moves or detect accidental matches
                       evaluateBoardState();
                   }, 300);
               }, 600);
@@ -538,7 +557,8 @@ const App: React.FC = () => {
               setIsProcessing(false);
           }
 
-          if (movesLeft <= 0 && enemy.currentHp > 0) {
+          // GAME OVER CHECK - Using Ref to ensure freshness inside recursive loop
+          if (movesLeftRef.current <= 0 && currentEnemy.currentHp > 0) {
               setAppState('gameover');
               soundManager.playLose();
           }
@@ -636,6 +656,7 @@ const App: React.FC = () => {
             const next = prev - 1;
             if (next <= 0) {
                 setPendingInterference(true);
+                pendingInterferenceRef.current = true; // Sync ref for immediate logic
                 // Reset timer for next cycle
                 return Math.floor(Math.random() * 3) + 2;
             }
@@ -691,12 +712,13 @@ const App: React.FC = () => {
          applyDamage(dmg);
          addFloatingText(GRID_WIDTH/2, GRID_HEIGHT/2, `¡${dmg}!`, 'yellow', 2);
          
-         if (enemy.currentHp - dmg <= 0) {
-              setEnemy(prev => ({...prev, currentHp: 0}));
-              setTimeout(() => handleVictorySequence(), 1000);
-         } else {
-              setTimeout(() => evaluateBoardState(), 400);
-         }
+         // Fix Nuke Victory Check: wait for state to propagate OR force check via ref in next cycle
+         // Since we apply damage which sets state, and then call evaluate, the evaluate needs the Ref.
+         // We rely on evaluateBoardState reading the UPDATED Ref.
+         // But setState is async. 
+         // Strategy: We assume applyDamage updates state -> Effect updates Ref.
+         // Timeout 400ms should be enough for render cycle.
+         setTimeout(() => evaluateBoardState(), 400);
          return; 
      } 
 
