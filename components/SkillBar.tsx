@@ -16,18 +16,20 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
     const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isLongPress = useRef(false);
 
-    const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, monster: Boss) => {
-        if (disabled && !charges) return; // Allow viewing info even if disabled, generally, but logic below handles interaction
+    // Updated type signature to accept MouseEvent, TouchEvent, or PointerEvent
+    const handlePointerDown = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
+        if (disabled && !charges) return; 
         
         isLongPress.current = false;
         pressTimer.current = setTimeout(() => {
             isLongPress.current = true;
             setInfoMonster(monster);
             soundManager.playButton();
-        }, 300); // 300ms threshold for long press
+        }, 300); 
     };
 
-    const handlePointerUp = (e: React.PointerEvent | React.TouchEvent, monster: Boss) => {
+    // Updated type signature
+    const handlePointerUp = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
         if (pressTimer.current) {
             clearTimeout(pressTimer.current);
             pressTimer.current = null;
@@ -38,11 +40,9 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
             const currentCharge = charges[monster.id] || 0;
             if (!disabled && currentCharge >= monster.skillCost) {
                 onUseSkill(monster);
-            } else if (!disabled) {
-                // Feedback for not ready? Optional, maybe a small shake or sound
             }
         } else {
-            // Was long press, clear info on release (optional, or keep until clicked elsewhere)
+            // Was long press, clear info on release
              setInfoMonster(null);
         }
     };
@@ -61,7 +61,6 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
                 const currentCharge = charges[monster.id] || 0;
                 const percent = Math.min(100, (currentCharge / monster.skillCost) * 100);
                 const isReady = percent >= 100;
-                const missing = Math.max(0, monster.skillCost - currentCharge);
 
                 return (
                     <div 

@@ -95,7 +95,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     };
 
     // --- TOUCH & LONG PRESS HANDLERS ---
-    const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, monster: Boss) => {
+    // Updated signature to accept MouseEvent directly
+    const handlePointerDown = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
         let clientX = 0;
         let clientY = 0;
 
@@ -247,7 +248,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                     onDrop={(e) => handleDrop(e, idx)}
 
                                     // ADD TOUCH/MOUSE HANDLERS TO SLOT FOR LONG PRESS DETAILS
-                                    onMouseDown={(e) => member && handlePointerDown(e as any, member)}
+                                    onMouseDown={(e) => member && handlePointerDown(e, member)}
                                     onMouseUp={handlePointerUp}
                                     onMouseLeave={handlePointerUp}
                                     onTouchStart={(e) => member && handlePointerDown(e, member)}
@@ -322,7 +323,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                         onDragStart={(e) => handleDragStart(e, monster)}
                                         
                                         // Touch / Mouse Down for Long Press
-                                        onMouseDown={(e) => handlePointerDown(e as any, monster)}
+                                        onMouseDown={(e) => handlePointerDown(e, monster)}
                                         onMouseUp={handlePointerUp}
                                         onMouseLeave={handlePointerUp}
 
