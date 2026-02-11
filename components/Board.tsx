@@ -327,6 +327,9 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               const cornerRadius = 14;
               const xPos = drawX + pad;
               const yPos = drawY + pad;
+              
+              // Highlight Border Check
+              const isHighlighted = highlightedTileIds.includes(tile.id);
 
               // --- SPECIAL DRAWING FOR STEEL ---
               if (tile.status === 'steel') {
@@ -384,12 +387,22 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   // Bottom-Right
                   ctx.beginPath(); ctx.arc(xPos + innerSize - rivetOffset, yPos + innerSize - rivetOffset, rivetSize, 0, Math.PI*2); ctx.fill();
 
-                  // Border
-                  ctx.strokeStyle = '#334155';
-                  ctx.lineWidth = 2;
+                  // Border (Highlight capable)
+                  if (isHighlighted) {
+                       ctx.strokeStyle = '#fff';
+                       ctx.lineWidth = 4;
+                       ctx.shadowColor = 'white';
+                       ctx.shadowBlur = 20;
+                  } else {
+                       ctx.strokeStyle = '#334155';
+                       ctx.lineWidth = 2;
+                       ctx.shadowBlur = 0;
+                  }
+                  
                   ctx.beginPath();
                   drawRoundedRect(ctx, xPos, yPos, innerSize, innerSize, cornerRadius);
                   ctx.stroke();
+                  ctx.shadowBlur = 0; 
 
                   // Center Text for Life
                   if (tile.statusLife !== undefined) {
@@ -422,9 +435,6 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   drawRoundedRect(ctx, xPos, yPos, innerSize, innerSize, cornerRadius);
                   ctx.fill();
                   
-                  // Highlight Border for Match OR SKILL
-                  const isHighlighted = highlightedTileIds.includes(tile.id);
-
                   if ((tile.isMatched && isComboActive) || isHighlighted) {
                        ctx.strokeStyle = '#fff';
                        ctx.lineWidth = 4;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Boss } from '../types';
 import { TYPE_ICONS } from '../constants';
-import { LogOut } from 'lucide-react';
+import { LogOut, ArrowLeft } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 
 interface BossCardProps {
@@ -20,35 +20,41 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
   const hpPercentage = Math.max(0, (boss.currentHp / boss.maxHp) * 100);
 
   return (
-    <div className="relative w-full max-w-md mx-auto p-4 bg-slate-800/90 backdrop-blur rounded-3xl shadow-2xl border-2 border-slate-600 flex flex-col items-center">
+    // Added extra bottom padding (pb-12) to extend the box downwards
+    <div className="relative w-full max-w-md mx-auto pt-4 px-4 pb-12 bg-slate-800/90 backdrop-blur rounded-3xl shadow-2xl border-2 border-slate-600 flex flex-col items-center">
       
-      {/* --- TOP LEFT: QUIT BUTTON --- */}
+      {/* --- TOP LEFT: QUIT BUTTON (TeamSelector Style) --- */}
       {onQuit && (
           <button 
               onClick={onQuit} 
               disabled={boss.currentHp <= 0}
               className={`
                   absolute top-3 left-3 z-30
-                  bg-red-900/80 p-2 rounded-lg border border-red-700 text-red-200 transition-all
-                  ${boss.currentHp <= 0 ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:bg-red-800 active:scale-95'}
+                  px-3 py-2 rounded-full border shadow-lg backdrop-blur-sm transition-all active:scale-95 flex items-center gap-2
+                  ${boss.currentHp <= 0 
+                    ? 'bg-slate-800/50 border-slate-700 text-slate-500 cursor-not-allowed grayscale' 
+                    : 'bg-slate-800/80 border-slate-600 text-slate-300 hover:bg-red-900/80 hover:text-white hover:border-red-500'
+                  }
               `}
           >
+              <div className="relative"><ArrowLeft size={18} /></div>
+              <div className="w-px h-4 bg-slate-500"></div>
               <LogOut size={16} />
           </button>
       )}
 
-      {/* --- MIDDLE LEFT: TURNS COUNTER --- */}
+      {/* --- MIDDLE LEFT: TURNS COUNTER (LARGER) --- */}
       {movesLeft !== undefined && (
-          <div className="absolute top-1/2 left-3 -translate-y-1/2 z-30 flex flex-col items-center gap-1">
-               <div className="bg-slate-900/80 px-2 py-1.5 rounded-lg border border-slate-700 font-bold flex flex-col items-center shadow-lg">
-                    <span className="text-[9px] text-slate-400 uppercase tracking-tighter">Turnos</span>
-                    <span className={`text-xl leading-none ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
+          <div className="absolute top-1/2 left-3 -translate-y-1/2 z-30 flex flex-col items-center gap-1 transform translate-y-4">
+               <div className="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-700 font-bold flex flex-col items-center shadow-lg min-w-[3.5rem]">
+                    <span className="text-xs text-slate-400 uppercase tracking-tight mb-1">Turnos</span>
+                    <span className={`text-3xl leading-none font-black ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
                </div>
           </div>
       )}
 
       {/* --- TOP RIGHT: TYPE ICON --- */}
-      <div className="absolute top-2 right-4 border border-slate-500 w-10 h-10 rounded-full bg-slate-700/50 flex items-center justify-center shadow-lg z-30">
+      <div className="absolute top-3 right-4 border border-slate-500 w-10 h-10 rounded-full bg-slate-700/50 flex items-center justify-center shadow-lg z-30">
         <span className="text-2xl">{TYPE_ICONS[boss.type]}</span>
       </div>
 

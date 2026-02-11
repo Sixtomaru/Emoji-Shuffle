@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Boss } from '../types';
-import { TYPE_VIVID, TYPE_ICONS } from '../constants';
+import { TYPE_VIVID } from '../constants'; // Removed TYPE_ICONS import as it is no longer used
 import { Zap } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 
@@ -93,11 +93,6 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
                              ) : (
                                 <span className="text-3xl">{monster.emoji}</span>
                              )}
-                        </div>
-
-                        {/* Type Icon Badge (Small) */}
-                        <div className="absolute top-0 right-0 bg-black/60 rounded-full w-5 h-5 flex items-center justify-center z-20 border border-slate-700">
-                            <span className="text-[10px]">{TYPE_ICONS[monster.type]}</span>
                         </div>
                     </div>
                 );

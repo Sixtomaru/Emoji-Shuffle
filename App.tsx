@@ -1007,7 +1007,8 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                <div className="w-full max-w-md px-4 mb-4 z-10 relative mx-auto" ref={bossRef}>
+                {/* Reduced margin-bottom from mb-4 to mb-0 to reduce gap */}
+                <div className="w-full max-w-md px-4 mb-0 z-10 relative mx-auto" ref={bossRef}>
                     <BossCard 
                         boss={enemy} 
                         shake={bossShake} 
