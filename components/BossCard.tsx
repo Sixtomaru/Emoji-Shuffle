@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Boss } from '../types';
 import { TYPE_ICONS } from '../constants';
+import { LogOut } from 'lucide-react';
+import { soundManager } from '../utils/sound';
 
 interface BossCardProps {
   boss: Boss;
@@ -9,20 +11,48 @@ interface BossCardProps {
   isDefeated?: boolean; 
   hitEffect?: boolean; 
   isAttacking?: boolean; // New prop for interference animation
+  movesLeft?: number;
+  onQuit?: () => void;
 }
 
-const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeated, hitEffect, isAttacking }) => {
+const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeated, hitEffect, isAttacking, movesLeft, onQuit }) => {
   const [imgError, setImgError] = useState(false);
   const hpPercentage = Math.max(0, (boss.currentHp / boss.maxHp) * 100);
 
   return (
     <div className="relative w-full max-w-md mx-auto p-4 bg-slate-800/90 backdrop-blur rounded-3xl shadow-2xl border-2 border-slate-600 flex flex-col items-center">
-      <div className="absolute top-2 right-4 text-xs text-slate-300 font-mono border border-slate-500 px-3 py-1 rounded-full bg-slate-700/50 flex items-center gap-1">
-        <span>TIPO:</span>
-        <span className="text-lg">{TYPE_ICONS[boss.type]}</span>
+      
+      {/* --- TOP LEFT: QUIT BUTTON --- */}
+      {onQuit && (
+          <button 
+              onClick={onQuit} 
+              disabled={boss.currentHp <= 0}
+              className={`
+                  absolute top-3 left-3 z-30
+                  bg-red-900/80 p-2 rounded-lg border border-red-700 text-red-200 transition-all
+                  ${boss.currentHp <= 0 ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:bg-red-800 active:scale-95'}
+              `}
+          >
+              <LogOut size={16} />
+          </button>
+      )}
+
+      {/* --- MIDDLE LEFT: TURNS COUNTER --- */}
+      {movesLeft !== undefined && (
+          <div className="absolute top-1/2 left-3 -translate-y-1/2 z-30 flex flex-col items-center gap-1">
+               <div className="bg-slate-900/80 px-2 py-1.5 rounded-lg border border-slate-700 font-bold flex flex-col items-center shadow-lg">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-tighter">Turnos</span>
+                    <span className={`text-xl leading-none ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
+               </div>
+          </div>
+      )}
+
+      {/* --- TOP RIGHT: TYPE ICON --- */}
+      <div className="absolute top-2 right-4 border border-slate-500 w-10 h-10 rounded-full bg-slate-700/50 flex items-center justify-center shadow-lg z-30">
+        <span className="text-2xl">{TYPE_ICONS[boss.type]}</span>
       </div>
 
-      <div className="text-center mb-4">
+      <div className="text-center mb-4 mt-2">
         <h2 className="text-3xl font-black text-white tracking-wide drop-shadow-md">{boss.name}</h2>
       </div>
 

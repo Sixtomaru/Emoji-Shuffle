@@ -5,6 +5,7 @@ import AttackProjectile from './components/Beam';
 import TeamSelector from './components/TeamSelector';
 import MainMenu from './components/MainMenu';
 import CaptureModal from './components/CaptureModal';
+import SkillBar from './components/SkillBar'; // NEW IMPORT
 import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_WIDTH, GRID_HEIGHT, ProjectileData } from './types';
 import { createBoard, findMatches, applyGravity, applyInterference, MatchGroup, hasPossibleMoves } from './utils/gameLogic';
 import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS, TYPE_PROJECTILE_ICONS } from './constants';
@@ -48,7 +49,6 @@ const App: React.FC = () => {
   
   const [comboCount, setComboCount] = useState(0);
   const [skillCharges, setSkillCharges] = useState<Record<string, number>>({});
-  const [showSkillMenu, setShowSkillMenu] = useState(false);
   
   // --- NEW SKILL ANIMATION STATES ---
   const [skillAnnouncement, setSkillAnnouncement] = useState<string | null>(null);
@@ -677,8 +677,7 @@ const App: React.FC = () => {
   const executeSkill = async (monster: Boss) => {
      if (skillCharges[monster.id] < monster.skillCost || enemy.currentHp <= 0) return;
      
-     soundManager.playButton();
-     setShowSkillMenu(false);
+     // Remove showSkillMenu toggle here as it is no longer used
      setSkillCharges(prev => ({...prev, [monster.id]: 0}));
      setIsProcessing(true);
      comboRef.current = 0; 
@@ -839,7 +838,7 @@ const App: React.FC = () => {
       }
   };
 
-  const anySkillReady = team.some(m => (skillCharges[m.id] || 0) >= m.skillCost);
+  // const anySkillReady = team.some(m => (skillCharges[m.id] || 0) >= m.skillCost); // REMOVED: Was used for the old button bounce
 
   return (
     <div className={`h-screen w-screen bg-black flex overflow-hidden font-sans select-none text-slate-100 relative`}>
@@ -990,7 +989,7 @@ const App: React.FC = () => {
 
       {appState === 'playing' && (
           <>
-            <div className={`flex-1 h-full flex flex-col items-center relative min-w-0 justify-center z-10 w-full max-w-md mx-auto transition-all duration-700`}>
+            <div className={`flex-1 h-full flex flex-col items-center relative min-w-0 justify-center z-10 w-full max-w-md mx-auto transition-all duration-700 pt-4`}>
              
                 {stageCleared && (
                     <div className="absolute inset-x-0 top-1/3 z-50 flex items-center justify-center pointer-events-none">
@@ -1008,61 +1007,17 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                <div className="w-full flex justify-between items-center px-4 pt-4 pb-2 z-20">
-                    <button 
-                        onClick={handleQuitRequest} 
-                        disabled={enemy.currentHp <= 0}
-                        className={`
-                            bg-red-900/80 p-2 rounded-lg border border-red-700 text-red-200 transition-all
-                            ${enemy.currentHp <= 0 ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:bg-red-800'}
-                        `}
-                    >
-                        <LogOut size={18} />
-                    </button>
-
-                    <div className="bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-600 font-bold flex flex-col items-center">
-                        <span className="text-[10px] text-slate-400 uppercase">Turnos</span>
-                        <span className={`text-2xl ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
-                    </div>
-                    
-                    <div className="relative group">
-                        <button 
-                            onClick={() => !isProcessing && enemy.currentHp > 0 && (soundManager.playButton(), setShowSkillMenu(!showSkillMenu))}
-                            className={`bg-indigo-600 p-3 rounded-full border-2 border-indigo-400 shadow-lg shadow-indigo-500/30 active:scale-95 transition-all ${anySkillReady ? 'animate-bounce' : ''} ${enemy.currentHp <= 0 ? 'opacity-50 grayscale' : ''}`}
-                        >
-                            <Zap fill="currentColor" />
-                        </button>
-                        {showSkillMenu && enemy.currentHp > 0 && (
-                            <div className="absolute top-14 right-0 bg-slate-800 border border-slate-600 rounded-xl p-2 w-72 shadow-2xl z-50 flex flex-col gap-2 animate-in zoom-in">
-                                {team.map(m => {
-                                    const charge = skillCharges[m.id] || 0;
-                                    const ready = charge >= m.skillCost;
-                                    return (
-                                        <button 
-                                            key={m.id}
-                                            disabled={!ready}
-                                            onClick={() => executeSkill(m)}
-                                            className={`w-full flex items-center gap-3 p-2 rounded-lg text-left transition-all ${ready ? 'bg-indigo-900/50 hover:bg-indigo-800 border border-indigo-500' : 'opacity-50 grayscale'}`}
-                                        >
-                                            <div className="w-8 h-8 flex items-center justify-center">
-                                                {m.image ? <img src={m.image} className="w-full h-full object-contain" /> : <span className="text-xl">{m.emoji}</span>}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="text-xs font-bold text-white">{m.skillName}</div>
-                                                <div className="w-full h-1.5 bg-slate-900 rounded-full mt-1">
-                                                    <div className="h-full bg-yellow-400 rounded-full" style={{ width: `${Math.min(100, (charge / m.skillCost) * 100)}%` }}></div>
-                                                </div>
-                                            </div>
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="w-full max-w-md px-4 mb-2 z-10 relative mx-auto" ref={bossRef}>
-                    <BossCard boss={enemy} shake={bossShake} damageTaken={lastDamage} isDefeated={isDefeatedAnim} hitEffect={hitEffect} isAttacking={bossAttacking} />
+                <div className="w-full max-w-md px-4 mb-4 z-10 relative mx-auto" ref={bossRef}>
+                    <BossCard 
+                        boss={enemy} 
+                        shake={bossShake} 
+                        damageTaken={lastDamage} 
+                        isDefeated={isDefeatedAnim} 
+                        hitEffect={hitEffect} 
+                        isAttacking={bossAttacking} 
+                        movesLeft={movesLeft}
+                        onQuit={handleQuitRequest}
+                    />
                     
                     {comboCount >= 2 && (
                         <div className="absolute top-1/2 right-6 transform -translate-y-1/2 z-50 flex flex-col items-center animate-in zoom-in duration-300 pointer-events-none">
@@ -1079,11 +1034,19 @@ const App: React.FC = () => {
                     )}
                 </div>
 
+                {/* NEW SKILL BAR LOCATION - CENTERED BETWEEN BOSS AND BOARD */}
+                <SkillBar 
+                    team={team} 
+                    charges={skillCharges} 
+                    onUseSkill={executeSkill} 
+                    disabled={isProcessing || enemy.currentHp <= 0} 
+                />
+
                 <div className="flex-1 w-full relative flex flex-col justify-center items-center z-10" ref={boardRef}>
                     
                     {/* SKILL ANNOUNCEMENT MESSAGE */}
                     {skillAnnouncement && (
-                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/80 px-8 py-6 rounded-2xl backdrop-blur-md border-2 border-white/30 animate-in zoom-in duration-300 shadow-2xl flex flex-col items-center">
+                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/40 px-8 py-6 rounded-2xl backdrop-blur-md border-2 border-white/30 animate-in zoom-in duration-300 shadow-2xl flex flex-col items-center">
                             <span className="text-white font-black text-2xl md:text-3xl text-center whitespace-nowrap drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
                                 {skillAnnouncement}
                             </span>

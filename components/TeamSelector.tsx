@@ -1,8 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Boss, ElementType } from '../types';
-import { ChevronRight, ChevronLeft, ArrowLeft, Save, Lock } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ArrowLeft, Save, Lock, Zap } from 'lucide-react';
 import { soundManager } from '../utils/sound';
-import { getLevelBackground, TYPE_PASTELS, TYPE_ICONS } from '../constants';
+import { getLevelBackground, TYPE_PASTELS, TYPE_ICONS, TYPE_VIVID } from '../constants';
 
 interface TeamSelectorProps {
     collection: Boss[];
@@ -21,6 +21,8 @@ const ITEMS_PER_PAGE = 16;
 const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, onUpdateTeam, onStart, nextLevel, nextEnemy, movesLeft, onBackToMenu }) => {
     // Modal State for Long Press
     const [detailModalMonster, setDetailModalMonster] = useState<Boss | null>(null);
+    const [detailPosition, setDetailPosition] = useState<{x: number, y: number} | null>(null);
+    
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
@@ -94,22 +96,34 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
 
     // --- TOUCH & LONG PRESS HANDLERS ---
     const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, monster: Boss) => {
-        // Start Long Press Timer (Changed to 200ms)
-        longPressTimer.current = setTimeout(() => {
-            setDetailModalMonster(monster);
-            soundManager.playButton();
-        }, 200);
+        let clientX = 0;
+        let clientY = 0;
 
         if ('touches' in e) {
             const touch = e.touches[0];
+            clientX = touch.clientX;
+            clientY = touch.clientY;
             setDragMonster(monster);
-            setDragPos({ x: touch.clientX, y: touch.clientY });
+            setDragPos({ x: clientX, y: clientY });
+        } else {
+            const mouseEvent = e as React.MouseEvent;
+            clientX = mouseEvent.clientX;
+            clientY = mouseEvent.clientY;
         }
+
+        // Start Long Press Timer (Changed to 200ms)
+        longPressTimer.current = setTimeout(() => {
+            setDetailModalMonster(monster);
+            setDetailPosition({ x: clientX, y: clientY });
+            soundManager.playButton();
+        }, 200);
     };
 
     const handlePointerUp = () => {
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
         setDetailModalMonster(null); // Close modal on release
+        setDetailPosition(null);
+        setDragMonster(null); // Ensure cleanup of drag ghost
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
@@ -185,7 +199,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
 
             <div className="relative z-10 w-full flex flex-col items-center flex-1 overflow-hidden max-w-xl mx-auto">
                 <h1 className="text-3xl font-black text-white italic mb-2 uppercase tracking-widest drop-shadow-md">
-                    Fase {nextLevel}
+                    Nivel {nextLevel}/30
                 </h1>
                 
                 {/* VS Panel */}
@@ -231,11 +245,20 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                     data-slot-index={idx}
                                     onDragOver={handleDragOver}
                                     onDrop={(e) => handleDrop(e, idx)}
+
+                                    // ADD TOUCH/MOUSE HANDLERS TO SLOT FOR LONG PRESS DETAILS
+                                    onMouseDown={(e) => member && handlePointerDown(e as any, member)}
+                                    onMouseUp={handlePointerUp}
+                                    onMouseLeave={handlePointerUp}
+                                    onTouchStart={(e) => member && handlePointerDown(e, member)}
+                                    onTouchMove={handleTouchMove}
+                                    onTouchEnd={handleTouchEnd}
+
                                     // Added aspect-square and max-w for square squares
                                     className="flex-1 aspect-square max-w-[5rem] bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner"
                                 >
                                     {member ? (
-                                        <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900/40 rounded-xl">
+                                        <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900/40 rounded-xl pointer-events-none">
                                             <div className="w-8 h-8 md:w-10 md:h-10 mb-1 flex items-center justify-center filter drop-shadow-md">
                                                 {member.image && !imgErrors[member.id] ? (
                                                     <img 
@@ -355,7 +378,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                     {isButtonLocked ? (
                         <div className="flex items-center gap-2">
                              <Lock size={20} className="animate-pulse" />
-                             <span>ESPERA... ({lockCountdown})</span>
+                             <span>Preparando el tablero... ({lockCountdown})</span>
                         </div>
                     ) : (
                         <>¡A LUCHAR! <ChevronRight size={28} strokeWidth={3} /></>
@@ -363,13 +386,35 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 </button>
             </div>
 
-            {/* DETAILS MODAL (LONG PRESS) */}
-            {detailModalMonster && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
-                    <div className="bg-slate-900/95 p-6 rounded-3xl border-2 border-yellow-500 shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-in zoom-in duration-200 flex flex-col items-center max-w-xs text-center backdrop-blur-xl">
-                         <h3 className="text-2xl font-black text-yellow-400 mb-2">{detailModalMonster.skillName}</h3>
-                         <p className="text-white font-bold mb-4">{detailModalMonster.skillDescription}</p>
-                         <div className="text-xs text-slate-400 italic">Coste: {detailModalMonster.skillCost}</div>
+            {/* DETAILS MODAL (LONG PRESS) - POSITIONED RELATIVE TO TOUCH */}
+            {detailModalMonster && detailPosition && (
+                <div 
+                    className="fixed z-[100] animate-in zoom-in duration-200 pointer-events-none"
+                    style={{ 
+                        left: detailPosition.x, 
+                        top: detailPosition.y - 20, 
+                        transform: 'translate(-50%, -100%)' 
+                    }}
+                >
+                     <div className={`
+                        relative p-4 rounded-2xl backdrop-blur-md border border-white/20 shadow-2xl text-center
+                        ${TYPE_VIVID[detailModalMonster.type] || 'bg-slate-900'} 
+                        bg-opacity-80 w-64
+                    `}>
+                        {/* Down Arrow */}
+                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-inherit border-b border-r border-white/20"></div>
+                        
+                        <h3 className="text-lg font-black text-white uppercase tracking-wider drop-shadow-md mb-1">
+                            {detailModalMonster.skillName}
+                        </h3>
+                        <p className="text-xs text-white font-medium leading-relaxed mb-3">
+                            {detailModalMonster.skillDescription}
+                        </p>
+                        
+                        <div className="inline-flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full text-xs font-mono text-white border border-white/10">
+                            <Zap size={12} className='text-yellow-400' />
+                            <span>Coste: {detailModalMonster.skillCost}</span>
+                        </div>
                     </div>
                 </div>
             )}
