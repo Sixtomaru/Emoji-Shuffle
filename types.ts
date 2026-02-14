@@ -1,5 +1,5 @@
 
-export type ElementType = 'Fuego' | 'Agua' | 'Planta' | 'Eléctrico' | 'Tierra' | 'Roca' | 'Hielo' | 'Acero' | 'Fantasma' | 'Dragón' | 'Normal' | 'Bicho' | 'Volador' | 'Psíquico' | 'Hada';
+export type ElementType = 'Fuego' | 'Agua' | 'Planta' | 'Eléctrico' | 'Tierra' | 'Roca' | 'Hielo' | 'Acero' | 'Fantasma' | 'Dragón' | 'Normal' | 'Bicho' | 'Volador' | 'Psíquico' | 'Hada' | 'Lucha' | 'Siniestro';
 export type TileStatus = 'normal' | 'rock' | 'steel' | 'ice';
 
 export interface TileData {

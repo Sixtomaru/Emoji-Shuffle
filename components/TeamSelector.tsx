@@ -242,11 +242,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 onClick={() => { soundManager.playButton(); onBackToMenu(); }} 
                 className="absolute top-4 left-4 z-50 px-3 py-2 bg-slate-800/80 rounded-full border border-slate-600 text-slate-300 hover:bg-emerald-900/80 hover:text-white hover:border-emerald-500 shadow-lg backdrop-blur-sm transition-all active:scale-95 flex items-center gap-2"
             >
-                <div className="relative">
-                    <ArrowLeft size={20} />
-                </div>
-                <div className="w-px h-4 bg-slate-500"></div>
-                <Save size={18} />
+                <ArrowLeft size={20} />
+                <Save size={20} />
             </button>
 
             <div className="relative z-10 w-full flex flex-col items-center flex-1 overflow-hidden max-w-xl mx-auto pointer-events-none">

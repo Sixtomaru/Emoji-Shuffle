@@ -797,7 +797,7 @@ const App: React.FC = () => {
                  monsterId: monster.id, 
                  type: monster.type, 
                  emoji: monster.emoji, 
-                 image: monster.image,
+                 image: monster.image, 
                  status: 'normal' as const, 
                  statusLife: undefined
              };
@@ -974,7 +974,7 @@ const App: React.FC = () => {
                   <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700 backdrop-blur w-full mb-4">
                       <p className="text-slate-200 text-lg italic leading-relaxed mb-4">"{enemy.description}"</p>
                       <div className="border-t border-slate-700 pt-4">
-                          <span className="text-yellow-400 font-bold uppercase text-xs block mb-1">Habilidad Especial</span>
+                          <span className="text-yellow-400 font-bold uppercase text-xs block mb-1">Habilidad</span>
                           <span className="text-white font-bold text-xl block mb-1">{enemy.skillName}</span>
                           <span className="text-slate-400 text-sm">{enemy.skillDescription}</span>
                       </div>
@@ -989,7 +989,7 @@ const App: React.FC = () => {
 
       {appState === 'playing' && (
           <>
-            <div className={`flex-1 h-full flex flex-col items-center relative min-w-0 justify-center z-10 w-full max-w-md mx-auto transition-all duration-700 pt-4`}>
+            <div className={`flex-1 h-full flex flex-col items-center relative min-w-0 justify-center z-10 w-full max-w-md mx-auto transition-all duration-700 py-4`}>
              
                 {stageCleared && (
                     <div className="absolute inset-x-0 top-1/3 z-50 flex items-center justify-center pointer-events-none">
@@ -1036,12 +1036,15 @@ const App: React.FC = () => {
                 </div>
 
                 {/* NEW SKILL BAR LOCATION - CENTERED BETWEEN BOSS AND BOARD */}
-                <SkillBar 
-                    team={team} 
-                    charges={skillCharges} 
-                    onUseSkill={executeSkill} 
-                    disabled={isProcessing || enemy.currentHp <= 0} 
-                />
+                {/* Fixed exactly 10px margin top and bottom as requested */}
+                <div className="w-full flex justify-center my-[6px] z-20"> 
+                    <SkillBar 
+                        team={team} 
+                        charges={skillCharges} 
+                        onUseSkill={executeSkill} 
+                        disabled={isProcessing || enemy.currentHp <= 0} 
+                    />
+                </div>
 
                 <div className="flex-1 w-full relative flex flex-col justify-center items-center z-10" ref={boardRef}>
                     

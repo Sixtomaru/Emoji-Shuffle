@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Boss } from '../types';
 import { TYPE_ICONS } from '../constants';
-import { LogOut, ArrowLeft } from 'lucide-react';
+import { LogOut, ArrowLeft, Save } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 
 interface BossCardProps {
@@ -37,18 +37,17 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
                   }
               `}
           >
-              <div className="relative"><ArrowLeft size={18} /></div>
-              <div className="w-px h-4 bg-slate-500"></div>
-              <LogOut size={16} />
+              <ArrowLeft size={20} />
           </button>
       )}
 
       {/* --- MIDDLE LEFT: TURNS COUNTER (ALIGNED WITH BOSS) --- */}
+      {/* UPDATED: Smaller Size */}
       {movesLeft !== undefined && (
           <div className="absolute top-[45%] left-4 -translate-y-1/2 z-30 flex flex-col items-center gap-1">
-               <div className="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-700 font-bold flex flex-col items-center shadow-lg min-w-[3.5rem]">
-                    <span className="text-xs text-slate-400 uppercase tracking-tight mb-1">Turnos</span>
-                    <span className={`text-3xl leading-none font-black ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
+               <div className="bg-slate-900/80 px-2 py-1.5 rounded-lg border border-slate-700 font-bold flex flex-col items-center shadow-lg min-w-[2.5rem]">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-tight mb-0.5">Turnos</span>
+                    <span className={`text-2xl leading-none font-black ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
                </div>
           </div>
       )}

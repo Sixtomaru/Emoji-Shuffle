@@ -65,7 +65,7 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
     };
 
     return (
-        <div className="w-full max-w-md px-4 py-2 relative z-30">
+        <div className="w-full max-w-md px-4 py-0 relative z-30">
             {/* FIXED INFO MODAL - CENTERED TOP */}
             {infoMonster && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 z-50 animate-in zoom-in duration-200 pointer-events-none">

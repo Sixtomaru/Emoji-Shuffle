@@ -52,7 +52,9 @@ const CANVAS_THEME: Record<string, { fill: string, border: string }> = {
     'Bicho': { fill: 'rgba(217, 249, 157, 0.4)', border: '#bef264' },    
     'Volador': { fill: 'rgba(186, 230, 253, 0.4)', border: '#7dd3fc' },  
     'Psíquico': { fill: 'rgba(251, 207, 232, 0.4)', border: '#f9a8d4' }, 
-    'Hada': { fill: 'rgba(254, 205, 211, 0.4)', border: '#fda4af' }      
+    'Hada': { fill: 'rgba(254, 205, 211, 0.4)', border: '#fda4af' },
+    'Lucha': { fill: 'rgba(251, 146, 60, 0.4)', border: '#fb923c' },
+    'Siniestro': { fill: 'rgba(71, 85, 105, 0.5)', border: '#475569' }
 };
 
 const MOVE_SPEED = 0.15; 
@@ -659,7 +661,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
   return (
     <div 
         ref={containerRef}
-        className="relative w-full max-w-md aspect-square mx-auto mt-4 rounded-2xl shadow-2xl overflow-hidden bg-slate-900 border border-slate-700"
+        className="relative w-full max-w-md aspect-square mx-auto mt-0 rounded-2xl shadow-2xl overflow-hidden bg-slate-900 border border-slate-700"
         style={{ touchAction: 'none' }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
