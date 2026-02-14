@@ -28,7 +28,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
     const [currentPage, setCurrentPage] = useState(0);
     
-    // Custom Touch Drag State
+    // Custom Touch/Mouse Drag State
     const [dragMonster, setDragMonster] = useState<Boss | null>(null);
     const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
     
@@ -78,26 +78,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
         }
     };
 
-    // --- DESKTOP DND HANDLERS ---
-    const handleDragStart = (e: React.DragEvent, monster: Boss) => {
-        e.dataTransfer.setData('monsterId', monster.id);
-        if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    };
-
-    const handleDrop = (e: React.DragEvent, slotIndex: number) => {
-        e.preventDefault();
-        const monsterId = e.dataTransfer.getData('monsterId');
-        if (monsterId) {
-             const monster = collection.find(m => m.id === monsterId);
-             if (monster) equipMonster(monster, slotIndex);
-        }
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-    };
-
-    // --- TOUCH & LONG PRESS HANDLERS ---
+    // --- UNIFIED POINTER HANDLERS (MOUSE & TOUCH) ---
     const handlePointerDown = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
         let clientX = 0;
         let clientY = 0;
@@ -109,14 +90,15 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
             const touch = e.touches[0];
             clientX = touch.clientX;
             clientY = touch.clientY;
-            // Record start position for threshold check
-            startTouchRef.current = { x: clientX, y: clientY };
-            // NOTE: We do NOT set dragMonster yet. We wait for movement.
         } else {
             const mouseEvent = e as React.MouseEvent;
             clientX = mouseEvent.clientX;
             clientY = mouseEvent.clientY;
         }
+
+        // Record start position for threshold check
+        startTouchRef.current = { x: clientX, y: clientY };
+        // NOTE: We do NOT set dragMonster yet. We wait for movement.
 
         // Clear existing timer
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -126,7 +108,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
             setDetailModalMonster(monster);
             setDetailPosition({ x: clientX, y: clientY });
             soundManager.playButton();
-        }, 200);
+        }, 150); // Fast response
     };
 
     const handlePointerUp = () => {
@@ -136,16 +118,28 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
         
         // Reset refs
         startTouchRef.current = null;
-        // Do NOT clear dragMonster here immediately, let touchEnd handle the drop logic if needed
     };
 
-    const handleTouchMove = (e: React.TouchEvent) => {
-        const touch = e.touches[0];
+    // Unified Move Handler (attached to container)
+    const handleGlobalMove = (e: React.MouseEvent | React.TouchEvent) => {
+        let clientX = 0;
+        let clientY = 0;
+
+        if ('touches' in e) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            // If mouse is moving but no button pressed (and we aren't dragging), ignore
+            if (!touchedMonsterRef.current && !dragMonster) return;
+            const mouseEvent = e as React.MouseEvent;
+            clientX = mouseEvent.clientX;
+            clientY = mouseEvent.clientY;
+        }
         
         // Logic: Only start dragging if moved more than X pixels
         if (startTouchRef.current) {
-            const diffX = Math.abs(touch.clientX - startTouchRef.current.x);
-            const diffY = Math.abs(touch.clientY - startTouchRef.current.y);
+            const diffX = Math.abs(clientX - startTouchRef.current.x);
+            const diffY = Math.abs(clientY - startTouchRef.current.y);
             
             // THRESHOLD: 10 pixels
             if (diffX > 10 || diffY > 10) {
@@ -164,24 +158,35 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 }
                 
                 // Update position
-                if (e.cancelable) e.preventDefault(); 
-                setDragPos({ x: touch.clientX, y: touch.clientY });
+                setDragPos({ x: clientX, y: clientY });
             }
         } else if (dragMonster) {
             // Already dragging, just update
-             if (e.cancelable) e.preventDefault(); 
-             setDragPos({ x: touch.clientX, y: touch.clientY });
+             setDragPos({ x: clientX, y: clientY });
         }
     };
 
-    const handleTouchEnd = (e: React.TouchEvent) => {
+    // Unified End Handler (attached to container)
+    const handleGlobalEnd = (e: React.MouseEvent | React.TouchEvent) => {
         handlePointerUp(); // Clear modal and timers
         
         if (dragMonster) {
-            const touch = e.changedTouches[0];
-            const target = document.elementFromPoint(touch.clientX, touch.clientY);
-            
+            let clientX = 0;
+            let clientY = 0;
+
+            if ('changedTouches' in e) {
+                const touch = e.changedTouches[0];
+                clientX = touch.clientX;
+                clientY = touch.clientY;
+            } else {
+                const mouseEvent = e as React.MouseEvent;
+                clientX = mouseEvent.clientX;
+                clientY = mouseEvent.clientY;
+            }
+
+            const target = document.elementFromPoint(clientX, clientY);
             const slotElement = target?.closest('[data-slot-index]');
+            
             if (slotElement) {
                 const index = parseInt(slotElement.getAttribute('data-slot-index') || '-1');
                 if (index >= 0) {
@@ -219,7 +224,16 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     };
 
     return (
-        <div className={`absolute inset-0 z-50 flex flex-col items-center pt-8 pb-4 px-4 overflow-hidden transition-all duration-1000 ${getLevelBackground(nextLevel, nextEnemy.type)}`}>
+        <div 
+            className={`absolute inset-0 z-50 flex flex-col items-center pt-8 pb-4 px-4 overflow-hidden transition-all duration-1000 ${getLevelBackground(nextLevel, nextEnemy.type)}`}
+            // GLOBAL HANDLERS ON CONTAINER FOR DRAGGING
+            onMouseMove={handleGlobalMove}
+            onMouseUp={handleGlobalEnd}
+            onMouseLeave={handleGlobalEnd}
+            onTouchMove={handleGlobalMove}
+            onTouchEnd={handleGlobalEnd}
+            onTouchCancel={handleGlobalEnd}
+        >
             {/* Lighter overlay */}
             <div className="absolute inset-0 bg-slate-900/40 pointer-events-none"></div>
 
@@ -235,13 +249,15 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 <Save size={18} />
             </button>
 
-            <div className="relative z-10 w-full flex flex-col items-center flex-1 overflow-hidden max-w-xl mx-auto">
+            <div className="relative z-10 w-full flex flex-col items-center flex-1 overflow-hidden max-w-xl mx-auto pointer-events-none">
+                {/* Pointer events auto only on interactive children */}
+                
                 <h1 className="text-3xl font-black text-white italic mb-2 uppercase tracking-widest drop-shadow-md">
                     Nivel {nextLevel}/30
                 </h1>
                 
                 {/* VS Panel */}
-                <div className="w-full bg-slate-800/90 backdrop-blur-md rounded-2xl p-4 border border-slate-600 flex items-center gap-4 mb-2 shadow-xl">
+                <div className="w-full bg-slate-800/90 backdrop-blur-md rounded-2xl p-4 border border-slate-600 flex items-center gap-4 mb-2 shadow-xl pointer-events-auto">
                     <div className="flex-1 text-right">
                         <span className="text-xs text-red-400 font-bold uppercase block">Enemigo</span>
                         <span className="text-xl font-bold text-white">{nextEnemy.name}</span>
@@ -267,12 +283,12 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 </div>
 
                 {/* Moves Info */}
-                <div className="mb-2 bg-black/40 px-4 py-1.5 rounded-full text-xs text-slate-300 font-mono border border-white/10 shadow-lg">
+                <div className="mb-2 bg-black/40 px-4 py-1.5 rounded-full text-xs text-slate-300 font-mono border border-white/10 shadow-lg pointer-events-auto">
                     TURNOS DISPONIBLES: <span className="text-white font-bold text-base ml-1">{movesLeft}</span>
                 </div>
 
                 {/* Active Team Slots */}
-                <div className="w-full mb-4">
+                <div className="w-full mb-4 pointer-events-auto">
                     <span className="text-sm font-bold text-white uppercase drop-shadow block mb-2 text-center">Tu Equipo</span>
                     <div className="flex gap-2 justify-center">
                         {[0, 1, 2, 3].map(idx => {
@@ -281,21 +297,14 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                 <div 
                                     key={idx} 
                                     data-slot-index={idx}
-                                    onDragOver={handleDragOver}
-                                    onDrop={(e) => handleDrop(e, idx)}
-
+                                    
                                     // ADD TOUCH/MOUSE HANDLERS TO SLOT FOR LONG PRESS DETAILS
                                     onMouseDown={(e) => member && handlePointerDown(e, member)}
-                                    onMouseUp={handlePointerUp}
-                                    onMouseLeave={handlePointerUp}
                                     onTouchStart={(e) => member && handlePointerDown(e, member)}
-                                    onTouchMove={handleTouchMove}
-                                    onTouchEnd={handleTouchEnd}
-                                    onTouchCancel={handleTouchEnd}
                                     onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
 
                                     // Added aspect-square and max-w for square squares
-                                    className="flex-1 aspect-square max-w-[5rem] bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner select-none touch-none"
+                                    className="flex-1 aspect-square max-w-[5rem] bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner select-none touch-none cursor-pointer"
                                 >
                                     {member ? (
                                         <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900/40 rounded-xl pointer-events-none">
@@ -326,7 +335,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                 </div>
 
                 {/* Collection - Grid with Pages */}
-                <div className="flex-1 w-full bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 relative flex flex-col shadow-2xl mb-4 overflow-hidden">
+                <div className="flex-1 w-full bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 relative flex flex-col shadow-2xl mb-4 overflow-hidden pointer-events-auto">
                     <div className="flex items-center justify-center py-2 bg-black/20">
                         <span className="text-xs text-white font-bold uppercase tracking-widest text-shadow">MONSTEMOJIS DISPONIBLES</span>
                         <span className="text-[10px] text-slate-300 ml-2">({currentPage + 1}/{totalPages || 1})</span>
@@ -358,18 +367,10 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                 return (
                                     <div
                                         key={monster.id}
-                                        draggable={true}
-                                        onDragStart={(e) => handleDragStart(e, monster)}
                                         
-                                        // Touch / Mouse Down for Long Press
+                                        // Unified Pointer Handlers
                                         onMouseDown={(e) => handlePointerDown(e, monster)}
-                                        onMouseUp={handlePointerUp}
-                                        onMouseLeave={handlePointerUp}
-
                                         onTouchStart={(e) => handlePointerDown(e, monster)}
-                                        onTouchMove={handleTouchMove}
-                                        onTouchEnd={handleTouchEnd}
-                                        onTouchCancel={handleTouchEnd}
                                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
                                         
                                         className={`
@@ -410,7 +411,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                     onClick={() => { soundManager.playButton(); onStart(); }}
                     disabled={!isTeamValid || isButtonLocked}
                     className={`
-                        w-full max-w-sm py-4 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-[0_0_20px_rgba(0,0,0,0.5)] mb-2 border-2 border-white/20 relative overflow-hidden
+                        w-full max-w-sm py-4 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-[0_0_20px_rgba(0,0,0,0.5)] mb-2 border-2 border-white/20 relative overflow-hidden pointer-events-auto
                         ${isTeamValid && !isButtonLocked
                             ? 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white transform hover:scale-105 hover:shadow-[0_0_30px_rgba(34,197,94,0.6)]' 
                             : 'bg-slate-800 text-slate-500 cursor-not-allowed grayscale'
