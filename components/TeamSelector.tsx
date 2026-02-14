@@ -32,6 +32,10 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     const [dragMonster, setDragMonster] = useState<Boss | null>(null);
     const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
     
+    // Refs for gesture handling
+    const startTouchRef = useRef<{x: number, y: number} | null>(null);
+    const touchedMonsterRef = useRef<Boss | null>(null);
+    
     const [isButtonLocked, setIsButtonLocked] = useState(true);
     const [lockCountdown, setLockCountdown] = useState(3);
 
@@ -77,7 +81,6 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     // --- DESKTOP DND HANDLERS ---
     const handleDragStart = (e: React.DragEvent, monster: Boss) => {
         e.dataTransfer.setData('monsterId', monster.id);
-        // Clear long press if dragging starts
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
     };
 
@@ -95,25 +98,30 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     };
 
     // --- TOUCH & LONG PRESS HANDLERS ---
-    // Updated signature to accept MouseEvent directly
     const handlePointerDown = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
         let clientX = 0;
         let clientY = 0;
 
+        // Store the monster we initially touched
+        touchedMonsterRef.current = monster;
+
         if ('touches' in e) {
-            // e.preventDefault(); // Stop native scrolling/selection
             const touch = e.touches[0];
             clientX = touch.clientX;
             clientY = touch.clientY;
-            setDragMonster(monster);
-            setDragPos({ x: clientX, y: clientY });
+            // Record start position for threshold check
+            startTouchRef.current = { x: clientX, y: clientY };
+            // NOTE: We do NOT set dragMonster yet. We wait for movement.
         } else {
             const mouseEvent = e as React.MouseEvent;
             clientX = mouseEvent.clientX;
             clientY = mouseEvent.clientY;
         }
 
-        // Start Long Press Timer (Changed to 200ms)
+        // Clear existing timer
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+
+        // Start Long Press Timer
         longPressTimer.current = setTimeout(() => {
             setDetailModalMonster(monster);
             setDetailPosition({ x: clientX, y: clientY });
@@ -123,27 +131,51 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
 
     const handlePointerUp = () => {
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
-        setDetailModalMonster(null); // Close modal on release
+        setDetailModalMonster(null);
         setDetailPosition(null);
-        setDragMonster(null); // Ensure cleanup of drag ghost
+        
+        // Reset refs
+        startTouchRef.current = null;
+        // Do NOT clear dragMonster here immediately, let touchEnd handle the drop logic if needed
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
-        // If moved, cancel long press
-        if (longPressTimer.current) {
-            clearTimeout(longPressTimer.current);
-            longPressTimer.current = null;
-        }
+        const touch = e.touches[0];
+        
+        // Logic: Only start dragging if moved more than X pixels
+        if (startTouchRef.current) {
+            const diffX = Math.abs(touch.clientX - startTouchRef.current.x);
+            const diffY = Math.abs(touch.clientY - startTouchRef.current.y);
+            
+            // THRESHOLD: 10 pixels
+            if (diffX > 10 || diffY > 10) {
+                // Movement detected -> Cancel Long Press
+                if (longPressTimer.current) {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = null;
+                }
+                
+                // Hide modal if it appeared
+                setDetailModalMonster(null);
 
-        if (dragMonster) {
-            if (e.cancelable) e.preventDefault(); 
-            const touch = e.touches[0];
-            setDragPos({ x: touch.clientX, y: touch.clientY });
+                // Start Dragging visual if not already started
+                if (!dragMonster && touchedMonsterRef.current) {
+                    setDragMonster(touchedMonsterRef.current);
+                }
+                
+                // Update position
+                if (e.cancelable) e.preventDefault(); 
+                setDragPos({ x: touch.clientX, y: touch.clientY });
+            }
+        } else if (dragMonster) {
+            // Already dragging, just update
+             if (e.cancelable) e.preventDefault(); 
+             setDragPos({ x: touch.clientX, y: touch.clientY });
         }
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
-        handlePointerUp(); // Handle modal close and clear timers
+        handlePointerUp(); // Clear modal and timers
         
         if (dragMonster) {
             const touch = e.changedTouches[0];
@@ -157,9 +189,12 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                     soundManager.playSwap();
                 }
             }
-            // CRITICAL: Always clear drag state on touch end
             setDragMonster(null);
         }
+        
+        // Clear all refs
+        touchedMonsterRef.current = null;
+        startTouchRef.current = null;
     };
 
     const equipMonster = (monster: Boss, slotIndex: number) => {

@@ -31,7 +31,7 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
             isLongPress.current = true;
             setInfoMonster(monster);
             soundManager.playButton();
-        }, 250);
+        }, 150); // Reduced to 150ms for snappier response
     };
 
     const handlePointerUp = (e: React.PointerEvent, monster: Boss) => {
