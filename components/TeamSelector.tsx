@@ -142,7 +142,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
-        handlePointerUp(); // Handle modal close
+        handlePointerUp(); // Handle modal close and clear timers
         
         if (dragMonster) {
             const touch = e.changedTouches[0];
@@ -156,6 +156,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                     soundManager.playSwap();
                 }
             }
+            // CRITICAL: Always clear drag state on touch end
             setDragMonster(null);
         }
     };

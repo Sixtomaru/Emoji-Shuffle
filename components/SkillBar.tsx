@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Boss } from '../types';
-import { TYPE_VIVID } from '../constants'; // Removed TYPE_ICONS import as it is no longer used
+import { TYPE_VIVID } from '../constants';
 import { Zap } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 
@@ -16,19 +16,21 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
     const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isLongPress = useRef(false);
 
-    // Updated type signature to accept MouseEvent, TouchEvent, or PointerEvent
     const handlePointerDown = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
         if (disabled && !charges) return; 
         
+        // Clear any existing timer/state to prevent overlap
+        if (pressTimer.current) clearTimeout(pressTimer.current);
+        setInfoMonster(null); 
+
         isLongPress.current = false;
         pressTimer.current = setTimeout(() => {
             isLongPress.current = true;
             setInfoMonster(monster);
             soundManager.playButton();
-        }, 300); 
+        }, 250); // Slightly faster response
     };
 
-    // Updated type signature
     const handlePointerUp = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
         if (pressTimer.current) {
             clearTimeout(pressTimer.current);
@@ -45,6 +47,8 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
             // Was long press, clear info on release
              setInfoMonster(null);
         }
+        // Ensure reset
+        isLongPress.current = false;
     };
 
     const handlePointerLeave = () => {
@@ -53,59 +57,20 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
             pressTimer.current = null;
         }
         setInfoMonster(null);
+        isLongPress.current = false;
     };
 
     return (
-        <div className="w-full max-w-md px-4 py-2 flex justify-between gap-4 relative z-30">
-            {team.map((monster) => {
-                const currentCharge = charges[monster.id] || 0;
-                const percent = Math.min(100, (currentCharge / monster.skillCost) * 100);
-                const isReady = percent >= 100;
-
-                return (
-                    <div 
-                        key={monster.id}
-                        className={`relative w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden transition-all select-none
-                            ${disabled ? 'opacity-50 grayscale' : ''}
-                            ${isReady ? 'shadow-[0_0_15px_rgba(250,204,21,0.6)] border-2 border-yellow-400 scale-105' : 'border border-slate-600 bg-slate-900'}
-                        `}
-                        onMouseDown={(e) => handlePointerDown(e, monster)}
-                        onMouseUp={(e) => handlePointerUp(e, monster)}
-                        onMouseLeave={handlePointerLeave}
-                        onTouchStart={(e) => handlePointerDown(e, monster)}
-                        onTouchEnd={(e) => handlePointerUp(e, monster)}
-                    >
-                        {/* Background Charge Fill (Bottom to Top) */}
-                        <div 
-                            className="absolute bottom-0 left-0 w-full bg-indigo-500/40 transition-all duration-500 ease-out z-0"
-                            style={{ height: `${percent}%` }}
-                        ></div>
-                        
-                        {/* Ready Glow Effect overlay */}
-                        {isReady && (
-                            <div className="absolute inset-0 bg-yellow-400/10 animate-pulse z-0"></div>
-                        )}
-
-                        {/* Monster Icon */}
-                        <div className={`absolute inset-0 flex items-center justify-center z-10 ${isReady ? 'animate-pulse' : ''}`}>
-                             {monster.image ? (
-                                <img src={monster.image} alt={monster.emoji} className="w-full h-full object-contain p-2" draggable={false} />
-                             ) : (
-                                <span className="text-3xl">{monster.emoji}</span>
-                             )}
-                        </div>
-                    </div>
-                );
-            })}
-
-            {/* INFO MODAL (Long Press) */}
+        <div className="w-full max-w-md px-4 py-2 relative z-30">
+            {/* FIXED INFO MODAL - CENTERED TOP */}
             {infoMonster && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 z-50 animate-in zoom-in duration-200 pointer-events-none">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 z-50 animate-in zoom-in duration-200 pointer-events-none">
                     <div className={`
                         relative p-4 rounded-2xl backdrop-blur-md border border-white/20 shadow-2xl text-center
                         ${TYPE_VIVID[infoMonster.type] || 'bg-slate-900'} 
-                        bg-opacity-80
+                        bg-opacity-95
                     `}>
+                        {/* Down Arrow */}
                         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-inherit border-b border-r border-white/20"></div>
                         
                         <h3 className="text-lg font-black text-white uppercase tracking-wider drop-shadow-md mb-1">
@@ -125,6 +90,49 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
                     </div>
                 </div>
             )}
+
+            <div className="flex justify-between gap-4">
+                {team.map((monster) => {
+                    const currentCharge = charges[monster.id] || 0;
+                    const percent = Math.min(100, (currentCharge / monster.skillCost) * 100);
+                    const isReady = percent >= 100;
+
+                    return (
+                        <div 
+                            key={monster.id}
+                            className={`relative w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden transition-all select-none
+                                ${disabled ? 'opacity-50 grayscale' : ''}
+                                ${isReady ? 'shadow-[0_0_15px_rgba(250,204,21,0.6)] border-2 border-yellow-400 scale-105' : 'border border-slate-600 bg-slate-900'}
+                            `}
+                            onMouseDown={(e) => handlePointerDown(e, monster)}
+                            onMouseUp={(e) => handlePointerUp(e, monster)}
+                            onMouseLeave={handlePointerLeave}
+                            onTouchStart={(e) => handlePointerDown(e, monster)}
+                            onTouchEnd={(e) => handlePointerUp(e, monster)}
+                        >
+                            {/* Background Charge Fill (Bottom to Top) */}
+                            <div 
+                                className="absolute bottom-0 left-0 w-full bg-indigo-500/40 transition-all duration-500 ease-out z-0"
+                                style={{ height: `${percent}%` }}
+                            ></div>
+                            
+                            {/* Ready Glow Effect overlay */}
+                            {isReady && (
+                                <div className="absolute inset-0 bg-yellow-400/10 animate-pulse z-0"></div>
+                            )}
+
+                            {/* Monster Icon */}
+                            <div className={`absolute inset-0 flex items-center justify-center z-10 ${isReady ? 'animate-pulse' : ''}`}>
+                                {monster.image ? (
+                                    <img src={monster.image} alt={monster.emoji} className="w-full h-full object-contain p-2" draggable={false} />
+                                ) : (
+                                    <span className="text-3xl">{monster.emoji}</span>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 };

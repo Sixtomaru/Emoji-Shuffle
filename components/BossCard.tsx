@@ -43,9 +43,9 @@ const BossCard: React.FC<BossCardProps> = ({ boss, shake, damageTaken, isDefeate
           </button>
       )}
 
-      {/* --- MIDDLE LEFT: TURNS COUNTER (LARGER) --- */}
+      {/* --- MIDDLE LEFT: TURNS COUNTER (ALIGNED WITH BOSS) --- */}
       {movesLeft !== undefined && (
-          <div className="absolute top-1/2 left-3 -translate-y-1/2 z-30 flex flex-col items-center gap-1 transform translate-y-4">
+          <div className="absolute top-[45%] left-4 -translate-y-1/2 z-30 flex flex-col items-center gap-1">
                <div className="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-700 font-bold flex flex-col items-center shadow-lg min-w-[3.5rem]">
                     <span className="text-xs text-slate-400 uppercase tracking-tight mb-1">Turnos</span>
                     <span className={`text-3xl leading-none font-black ${movesLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{movesLeft}</span>
