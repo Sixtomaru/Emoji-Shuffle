@@ -101,6 +101,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
         let clientY = 0;
 
         if ('touches' in e) {
+            // e.preventDefault(); // Stop native scrolling/selection
             const touch = e.touches[0];
             clientX = touch.clientX;
             clientY = touch.clientY;
@@ -255,9 +256,11 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                     onTouchStart={(e) => member && handlePointerDown(e, member)}
                                     onTouchMove={handleTouchMove}
                                     onTouchEnd={handleTouchEnd}
+                                    onTouchCancel={handleTouchEnd}
+                                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
 
                                     // Added aspect-square and max-w for square squares
-                                    className="flex-1 aspect-square max-w-[5rem] bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner"
+                                    className="flex-1 aspect-square max-w-[5rem] bg-slate-800/80 backdrop-blur-sm rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center relative group transition-all hover:border-indigo-400 shadow-inner select-none touch-none"
                                 >
                                     {member ? (
                                         <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900/40 rounded-xl pointer-events-none">
@@ -331,9 +334,11 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ collection, currentTeam, on
                                         onTouchStart={(e) => handlePointerDown(e, monster)}
                                         onTouchMove={handleTouchMove}
                                         onTouchEnd={handleTouchEnd}
+                                        onTouchCancel={handleTouchEnd}
+                                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
                                         
                                         className={`
-                                            w-full aspect-square max-w-[4.5rem] rounded-xl flex flex-col items-center justify-center border-2 relative cursor-grab active:cursor-grabbing transition-transform select-none flex-shrink-0
+                                            w-full aspect-square max-w-[4.5rem] rounded-xl flex flex-col items-center justify-center border-2 relative cursor-grab active:cursor-grabbing transition-transform select-none flex-shrink-0 touch-none
                                             ${bgColor}
                                             ${isSelected 
                                                 ? 'opacity-40 grayscale scale-95' 

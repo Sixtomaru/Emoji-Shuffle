@@ -16,22 +16,26 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
     const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isLongPress = useRef(false);
 
-    const handlePointerDown = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
-        if (disabled && !charges) return; 
+    const handlePointerDown = (e: React.PointerEvent, monster: Boss) => {
+        if (disabled && !charges) return;
         
-        // Clear any existing timer/state to prevent overlap
+        // Prevent default browser actions (scrolling, selecting)
+        e.preventDefault();
+        
+        // Clear previous states
         if (pressTimer.current) clearTimeout(pressTimer.current);
         setInfoMonster(null); 
-
         isLongPress.current = false;
+
         pressTimer.current = setTimeout(() => {
             isLongPress.current = true;
             setInfoMonster(monster);
             soundManager.playButton();
-        }, 250); // Slightly faster response
+        }, 250);
     };
 
-    const handlePointerUp = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent, monster: Boss) => {
+    const handlePointerUp = (e: React.PointerEvent, monster: Boss) => {
+        e.preventDefault();
         if (pressTimer.current) {
             clearTimeout(pressTimer.current);
             pressTimer.current = null;
@@ -47,11 +51,11 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
             // Was long press, clear info on release
              setInfoMonster(null);
         }
-        // Ensure reset
         isLongPress.current = false;
     };
 
-    const handlePointerLeave = () => {
+    const handlePointerLeave = (e: React.PointerEvent) => {
+        e.preventDefault();
         if (pressTimer.current) {
             clearTimeout(pressTimer.current);
             pressTimer.current = null;
@@ -100,15 +104,15 @@ const SkillBar: React.FC<SkillBarProps> = ({ team, charges, onUseSkill, disabled
                     return (
                         <div 
                             key={monster.id}
-                            className={`relative w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden transition-all select-none
+                            className={`relative w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden transition-all select-none touch-none
                                 ${disabled ? 'opacity-50 grayscale' : ''}
                                 ${isReady ? 'shadow-[0_0_15px_rgba(250,204,21,0.6)] border-2 border-yellow-400 scale-105' : 'border border-slate-600 bg-slate-900'}
                             `}
-                            onMouseDown={(e) => handlePointerDown(e, monster)}
-                            onMouseUp={(e) => handlePointerUp(e, monster)}
-                            onMouseLeave={handlePointerLeave}
-                            onTouchStart={(e) => handlePointerDown(e, monster)}
-                            onTouchEnd={(e) => handlePointerUp(e, monster)}
+                            onPointerDown={(e) => handlePointerDown(e, monster)}
+                            onPointerUp={(e) => handlePointerUp(e, monster)}
+                            onPointerLeave={handlePointerLeave}
+                            onPointerCancel={handlePointerLeave}
+                            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} // CRITICAL: Prevents browser menu on long press
                         >
                             {/* Background Charge Fill (Bottom to Top) */}
                             <div 
