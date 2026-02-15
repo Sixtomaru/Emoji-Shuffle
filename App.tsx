@@ -10,14 +10,27 @@ import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_W
 import { createBoard, findMatches, applyGravity, applyInterference, MatchGroup, hasPossibleMoves } from './utils/gameLogic';
 import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS, TYPE_PROJECTILE_ICONS } from './constants';
 import { soundManager } from './utils/sound';
-import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2, Save, AlertTriangle, Trash2 } from 'lucide-react';
+import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2, Save, AlertTriangle, Trash2, Settings, AlertOctagon, Maximize, Download } from 'lucide-react';
 
 const SAVE_KEY_DATA = 'MONSTEMOJIS_SAVE_DATA';
 const SAVE_KEY_COLLECTION = 'MONSTEMOJIS_COLLECTION';
 const SAVE_KEY_TUTORIAL = 'MONSTEMOJIS_TUTORIAL_SEEN';
+const SAVE_KEY_FULLSCREEN = 'MONSTEMOJIS_SETTING_FULLSCREEN';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<GameState['status']>('menu');
+  // Transition State
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // Settings State
+  const [fullscreenEnabled, setFullscreenEnabled] = useState(() => {
+      const stored = localStorage.getItem(SAVE_KEY_FULLSCREEN);
+      return stored !== null ? stored === 'true' : true; // Default to true
+  });
+  
+  // PWA Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
   const [level, setLevel] = useState(1);
   const [movesLeft, setMovesLeft] = useState(INITIAL_MOVES);
   const [movesAtStart, setMovesAtStart] = useState(INITIAL_MOVES);
@@ -71,6 +84,8 @@ const App: React.FC = () => {
   const [showQuitConfirmation, setShowQuitConfirmation] = useState(false);
   const [showMarathonTutorial, setShowMarathonTutorial] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const bossRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -101,6 +116,22 @@ const App: React.FC = () => {
       localStorage.setItem(SAVE_KEY_COLLECTION, JSON.stringify(collection));
   }, [collection]);
 
+  // Save fullscreen setting whenever it changes
+  useEffect(() => {
+      localStorage.setItem(SAVE_KEY_FULLSCREEN, String(fullscreenEnabled));
+  }, [fullscreenEnabled]);
+
+  // Capture PWA Install Prompt
+  useEffect(() => {
+      const handler = (e: Event) => {
+          e.preventDefault();
+          setDeferredPrompt(e);
+          console.log("Install prompt captured");
+      };
+      window.addEventListener('beforeinstallprompt', handler);
+      return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
   // Resume game loop after finish message disappears
   useEffect(() => {
       if (!showFinishMessage && finishTriggeredRef.current) {
@@ -108,13 +139,33 @@ const App: React.FC = () => {
       }
   }, [showFinishMessage]);
 
+  const changeState = (newState: GameState['status']) => {
+      setIsTransitioning(true);
+      setTimeout(() => {
+          setAppState(newState);
+          setTimeout(() => {
+             setIsTransitioning(false);
+          }, 100); // Short delay before revealing new state
+      }, 500); // 500ms fade out
+  };
+
   const enterFullscreen = () => {
+      if (!fullscreenEnabled) return; // Respect setting
       try {
         const elem = document.documentElement;
         if (elem.requestFullscreen) {
             elem.requestFullscreen().catch(err => console.log(err));
         }
       } catch (e) { console.log("Fullscreen not supported"); }
+  };
+
+  const handleInstallClick = async () => {
+      if (!deferredPrompt) return;
+      soundManager.playButton();
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User response to the install prompt: ${outcome}`);
+      setDeferredPrompt(null);
   };
 
   const scaleEnemyHp = (baseEnemy: Boss, lvl: number, isFinal: boolean): Boss => {
@@ -148,7 +199,7 @@ const App: React.FC = () => {
               // DELETE SAVE ON LOAD (Suspend feature)
               localStorage.removeItem(SAVE_KEY_DATA);
               
-              setAppState('team_select');
+              changeState('team_select');
               showToast("Partida cargada");
           }
       } catch (e) {
@@ -167,14 +218,27 @@ const App: React.FC = () => {
       };
       
       localStorage.setItem(SAVE_KEY_DATA, JSON.stringify(data));
-      setAppState('menu');
+      changeState('menu');
       setShowQuitConfirmation(false);
       showToast("Progreso guardado");
   };
 
   const quitWithoutSaving = () => {
-      setAppState('menu');
+      changeState('menu');
       setShowQuitConfirmation(false);
+  };
+  
+  const handleDeleteAllData = () => {
+      soundManager.playLose(); // Sound effect
+      localStorage.clear();
+      setCollection([MONSTER_DB[0], MONSTER_DB[1], MONSTER_DB[2], MONSTER_DB[3]]);
+      setTeam([MONSTER_DB[0], MONSTER_DB[1], MONSTER_DB[2], MONSTER_DB[3]]);
+      setLevel(1);
+      // Reset setting as well to default
+      setFullscreenEnabled(true);
+      setShowDeleteConfirm(false);
+      changeState('menu');
+      showToast("Datos borrados correctamente");
   };
 
   const showToast = (msg: string) => {
@@ -222,7 +286,7 @@ const App: React.FC = () => {
       setNextPreviewEnemy(scaleEnemyHp(plan[0], 1, false)); 
       setMovesLeft(INITIAL_MOVES);
       setMovesAtStart(INITIAL_MOVES);
-      setAppState('team_select');
+      changeState('team_select');
       setSkillCharges({});
   };
 
@@ -234,13 +298,17 @@ const App: React.FC = () => {
       setNextPreviewEnemy(scaleEnemyHp(SECRET_BOSS, startLvl, true));
       setMovesLeft(20);
       setMovesAtStart(20);
-      setAppState('team_select');
+      changeState('team_select');
       setSkillCharges({});
   }
 
   const handleOpenGallery = () => {
       enterFullscreen();
-      setAppState('gallery');
+      changeState('gallery');
+  };
+  
+  const handleOpenOptions = () => {
+      changeState('options');
   };
 
   const handleQuitRequest = () => {
@@ -258,7 +326,7 @@ const App: React.FC = () => {
       setEnemy(nextPreviewEnemy);
       setMovesAtStart(movesLeft);
       setBoard(createBoard(team));
-      setAppState('playing');
+      changeState('playing');
       setSkillCharges({});
       setTurnsToInterference(Math.floor(Math.random() * 3) + 2); 
       setIsProcessing(false);
@@ -287,7 +355,7 @@ const App: React.FC = () => {
              // Saving logic is handled by useEffect on [collection]
              setCollection(prev => [...prev, { ...enemy, currentHp: enemy.maxHp, id: enemy.id + '_caught_' + Date.now() }]);
           }
-          setAppState('captured_info');
+          changeState('captured_info');
       } else {
           advanceLevel();
       }
@@ -299,19 +367,19 @@ const App: React.FC = () => {
 
       if (isFinalBossMode) {
           soundManager.playWin();
-          setAppState('victory'); 
+          changeState('victory'); 
           return;
       }
       if (level >= 30) {
           soundManager.playWin();
-          setAppState('victory'); 
+          changeState('victory'); 
       } else {
           const nextLvl = level + 1;
           setLevel(nextLvl);
           const baseEnemy = levelPlan[nextLvl - 1]; 
           setNextPreviewEnemy(scaleEnemyHp(baseEnemy, nextLvl, false));
           setMovesLeft(m => m + MOVES_PER_LEVEL);
-          setAppState('team_select');
+          changeState('team_select');
       }
   };
 
@@ -559,7 +627,7 @@ const App: React.FC = () => {
 
           // GAME OVER CHECK - Using Ref to ensure freshness inside recursive loop
           if (movesLeftRef.current <= 0 && currentEnemy.currentHp > 0) {
-              setAppState('gameover');
+              changeState('gameover');
               soundManager.playLose();
           }
 
@@ -590,9 +658,9 @@ const App: React.FC = () => {
       // LOCK: Prevent re-entry
       victoryProcessedRef.current = true;
 
-      if (isFinalBossMode) setAppState('victory');
+      if (isFinalBossMode) changeState('victory');
       else if (collection.some(m => m.name === enemy.name)) advanceLevel();
-      else setAppState('capture');
+      else changeState('capture');
   }
 
   const handleMove = async (id: string, targetX: number, targetY: number) => {
@@ -844,12 +912,16 @@ const App: React.FC = () => {
     <div className={`h-screen w-screen bg-black flex overflow-hidden font-sans select-none text-slate-100 relative`}>
       <div className={`absolute inset-0 z-0 transition-all duration-700 ease-in-out ${getLevelBackground(level, enemy.type)}`}></div>
 
+      {/* GLOBAL SCREEN TRANSITION OVERLAY */}
+      <div className={`fixed inset-0 z-[200] bg-black pointer-events-none transition-opacity duration-500 ${isTransitioning ? 'opacity-100' : 'opacity-0'}`}></div>
+
       {appState === 'menu' && (
           <MainMenu 
             onStartArcade={() => handleStartArcade(true)} // Default to check continue
             onOpenGallery={handleOpenGallery} 
             collectionSize={collection.length}
             onStartFinalBoss={handleStartFinalBoss}
+            onOpenOptions={handleOpenOptions}
             hasSaveGame={hasSaveGame()}
           />
       )}
@@ -899,12 +971,102 @@ const App: React.FC = () => {
               );
           })}
       </div>
+      
+      {appState === 'options' && (
+          <div className="absolute inset-0 z-50 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-indigo-900 via-slate-900 to-black p-4 flex flex-col items-center justify-center">
+              <div className="w-full max-w-md bg-slate-800/90 p-8 rounded-2xl border border-slate-600 shadow-2xl backdrop-blur-md overflow-y-auto max-h-full">
+                   <h2 className="text-3xl font-black text-white text-center mb-8 flex items-center justify-center gap-3">
+                       <Settings className="text-slate-400" />
+                       OPCIONES
+                   </h2>
+                   
+                   {!showDeleteConfirm ? (
+                       <div className="flex flex-col gap-4">
+                            
+                            {/* Fullscreen Toggle */}
+                            <button 
+                                onClick={() => { soundManager.playButton(); setFullscreenEnabled(!fullscreenEnabled); }}
+                                className="w-full bg-slate-900/50 hover:bg-slate-900 border border-slate-700 p-4 rounded-xl flex items-center justify-between group transition-all"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Maximize size={24} className="text-indigo-400" />
+                                    <div className="text-left">
+                                        <div className="text-white font-bold text-sm">Jugar en Pantalla Completa</div>
+                                        <div className="text-slate-400 text-xs">(Recomendado)</div>
+                                    </div>
+                                </div>
+                                
+                                <div className={`w-14 h-8 rounded-full p-1 transition-colors ${fullscreenEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}>
+                                    <div className={`w-6 h-6 rounded-full bg-white shadow-md transform transition-transform ${fullscreenEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </div>
+                            </button>
+
+                            <div className="h-px bg-slate-600 my-2"></div>
+
+                            <button 
+                                onClick={() => { soundManager.playButton(); setShowDeleteConfirm(true); }}
+                                className="w-full bg-red-900/20 hover:bg-red-900/40 border border-red-500/50 text-red-200 font-bold text-lg py-4 rounded-xl shadow-lg flex items-center justify-center gap-3 transition-all"
+                            >
+                                <Trash2 size={20} />
+                                BORRAR TODOS LOS DATOS
+                            </button>
+                            
+                            {/* PWA Install Button - Only show if captured */}
+                            {deferredPrompt && (
+                                <button 
+                                    onClick={handleInstallClick}
+                                    className="w-full bg-emerald-700/80 hover:bg-emerald-600 border border-emerald-500 text-white font-bold text-lg py-4 rounded-xl shadow-lg flex items-center justify-center gap-3 transition-all animate-pulse"
+                                >
+                                    <Download size={20} />
+                                    Instala la versión web-app
+                                </button>
+                            )}
+
+                            <div className="h-px bg-slate-600 my-2"></div>
+
+                            <button 
+                                onClick={() => { soundManager.playButton(); changeState('menu'); }}
+                                className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold text-lg py-4 rounded-xl shadow-lg transition-all"
+                            >
+                                VOLVER
+                            </button>
+                       </div>
+                   ) : (
+                       <div className="flex flex-col gap-4 animate-in fade-in zoom-in">
+                           <div className="bg-red-950/80 p-4 rounded-xl border border-red-500 mb-2">
+                               <p className="text-red-200 font-bold text-center flex flex-col items-center gap-2">
+                                   <AlertOctagon size={48} className="text-red-500" />
+                                   ¿ESTÁS SEGURO?
+                               </p>
+                               <p className="text-red-300 text-sm text-center mt-2">
+                                   Esta acción borrará todo tu progreso, álbum y partida guardada. No se puede deshacer.
+                               </p>
+                           </div>
+                           
+                           <button 
+                                onClick={handleDeleteAllData}
+                                className="w-full bg-red-600 hover:bg-red-500 text-white font-black text-lg py-4 rounded-xl shadow-lg flex items-center justify-center gap-3 transition-all animate-pulse"
+                            >
+                                SÍ, BORRAR TODO
+                            </button>
+                            
+                            <button 
+                                onClick={() => { soundManager.playButton(); setShowDeleteConfirm(false); }}
+                                className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold text-lg py-4 rounded-xl shadow-lg transition-all"
+                            >
+                                CANCELAR
+                            </button>
+                       </div>
+                   )}
+              </div>
+          </div>
+      )}
 
       {appState === 'gallery' && (
           <div className="absolute inset-0 z-50 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-indigo-900 via-slate-900 to-black p-4 flex flex-col">
               <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-white">MONSTEMOJIS</h2>
-                  <button onClick={() => { soundManager.playButton(); setAppState('menu'); }} className="bg-slate-700 p-2 rounded-full"><X /></button>
+                  <button onClick={() => { soundManager.playButton(); changeState('menu'); }} className="bg-slate-700 p-2 rounded-full"><X /></button>
               </div>
               <div className="grid grid-cols-4 gap-2 overflow-y-auto pb-20 no-scrollbar">
                   {collection.map(m => (
@@ -1223,7 +1385,7 @@ const App: React.FC = () => {
           <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center text-center p-8">
               <h1 className="text-6xl mb-4">🏆</h1>
               <h2 className="text-4xl font-black text-yellow-400 mb-4">¡VICTORIA!</h2>
-              <button onClick={() => { soundManager.playButton(); setAppState('menu'); }} className="bg-white text-black px-8 py-4 rounded-xl font-bold">Volver al Menú</button>
+              <button onClick={() => { soundManager.playButton(); changeState('menu'); }} className="bg-white text-black px-8 py-4 rounded-xl font-bold">Volver al Menú</button>
           </div>
       )}
 
@@ -1231,7 +1393,7 @@ const App: React.FC = () => {
           <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center text-center p-8">
               <Skull size={64} className="text-red-600 mb-4" />
               <h2 className="text-4xl font-black text-white mb-2">GAME OVER</h2>
-              <button onClick={() => { soundManager.playButton(); setAppState('menu'); }} className="bg-slate-700 text-white px-8 py-4 rounded-xl font-bold flex gap-2"><RotateCcw /> Volver al Menú</button>
+              <button onClick={() => { soundManager.playButton(); changeState('menu'); }} className="bg-slate-700 text-white px-8 py-4 rounded-xl font-bold flex gap-2"><RotateCcw /> Volver al Menú</button>
           </div>
       )}
     </div>

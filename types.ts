@@ -1,5 +1,5 @@
 
-export type ElementType = 'Fuego' | 'Agua' | 'Planta' | 'Eléctrico' | 'Tierra' | 'Roca' | 'Hielo' | 'Acero' | 'Fantasma' | 'Dragón' | 'Normal' | 'Bicho' | 'Volador' | 'Psíquico' | 'Hada' | 'Lucha' | 'Siniestro';
+export type ElementType = 'Fuego' | 'Agua' | 'Planta' | 'Eléctrico' | 'Tierra' | 'Roca' | 'Hielo' | 'Acero' | 'Fantasma' | 'Dragón' | 'Normal' | 'Bicho' | 'Volador' | 'Psíquico' | 'Hada' | 'Lucha' | 'Siniestro' | 'Veneno';
 export type TileStatus = 'normal' | 'rock' | 'steel' | 'ice';
 
 export interface TileData {
@@ -46,7 +46,7 @@ export interface GameState {
   board: TileData[];
   movesLeft: number;
   currentLevel: number; 
-  status: 'menu' | 'team_select' | 'playing' | 'capture' | 'captured_info' | 'victory' | 'gameover' | 'gallery';
+  status: 'menu' | 'team_select' | 'playing' | 'capture' | 'captured_info' | 'victory' | 'gameover' | 'gallery' | 'options';
   selectedTileId: string | null;
   combo: number;
   skillCharges: Record<string, number>; 

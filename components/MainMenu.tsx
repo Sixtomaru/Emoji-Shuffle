@@ -1,6 +1,6 @@
 import React from 'react';
 import { Boss } from '../types';
-import { Play, Skull, Book, ChevronsRight } from 'lucide-react';
+import { Play, Skull, Book, ChevronsRight, Settings } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 import { MONSTER_DB } from '../constants';
 
@@ -9,10 +9,11 @@ interface MainMenuProps {
     onOpenGallery: () => void;
     collectionSize: number;
     onStartFinalBoss: () => void;
+    onOpenOptions: () => void; // New Prop
     hasSaveGame?: boolean;
 }
 
-const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, collectionSize, onStartFinalBoss, hasSaveGame }) => {
+const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, collectionSize, onStartFinalBoss, onOpenOptions, hasSaveGame }) => {
     // Check if player has all regular monsters
     const isComplete = collectionSize >= MONSTER_DB.length;
 
@@ -58,6 +59,14 @@ const MainMenu: React.FC<MainMenuProps> = ({ onStartArcade, onOpenGallery, colle
                 >
                     <Book size={24} className="text-indigo-400" />
                     MONSTEMOJIS ({collectionSize}/{MONSTER_DB.length})
+                </button>
+
+                <button 
+                    onClick={() => { soundManager.playButton(); onOpenOptions(); }}
+                    className="w-full bg-slate-800/80 hover:bg-slate-800 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-3 border border-slate-600 backdrop-blur-sm"
+                >
+                    <Settings size={24} className="text-slate-400" />
+                    OPCIONES
                 </button>
             </div>
             

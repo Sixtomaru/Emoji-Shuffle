@@ -9,7 +9,7 @@ export const TYPE_CHART: Record<ElementType, ElementType[]> = {
     'Agua': ['Fuego', 'Tierra', 'Roca'],
     'Planta': ['Agua', 'Tierra', 'Roca'],
     'Eléctrico': ['Agua', 'Volador'],
-    'Tierra': ['Fuego', 'Eléctrico', 'Roca', 'Acero'],
+    'Tierra': ['Fuego', 'Eléctrico', 'Roca', 'Acero', 'Veneno'],
     'Roca': ['Fuego', 'Hielo', 'Volador', 'Bicho'],
     'Hielo': ['Planta', 'Tierra', 'Volador', 'Dragón'],
     'Acero': ['Hielo', 'Roca', 'Hada'],
@@ -18,10 +18,11 @@ export const TYPE_CHART: Record<ElementType, ElementType[]> = {
     'Normal': [],
     'Bicho': ['Planta', 'Psíquico', 'Siniestro'],
     'Volador': ['Planta', 'Bicho', 'Lucha'],
-    'Psíquico': ['Lucha'],
+    'Psíquico': ['Lucha', 'Veneno'],
     'Hada': ['Dragón', 'Lucha', 'Siniestro'],
     'Lucha': ['Normal', 'Hielo', 'Roca', 'Acero', 'Siniestro'],
-    'Siniestro': ['Fantasma', 'Psíquico']
+    'Siniestro': ['Fantasma', 'Psíquico'],
+    'Veneno': ['Planta', 'Hada']
 };
 
 export const TYPE_ICONS: Record<ElementType, string> = {
@@ -41,7 +42,8 @@ export const TYPE_ICONS: Record<ElementType, string> = {
     'Psíquico': '🔮',
     'Hada': '✨',
     'Lucha': '🥊',
-    'Siniestro': '🌑'
+    'Siniestro': '🌑',
+    'Veneno': '☠️'
 };
 
 // Small icons for the projectile stream
@@ -62,7 +64,8 @@ export const TYPE_PROJECTILE_ICONS: Record<ElementType, string> = {
     'Psíquico': '🌀',
     'Hada': '✨',
     'Lucha': '👊',
-    'Siniestro': '🌙'
+    'Siniestro': '🌙',
+    'Veneno': '🧪'
 };
 
 export const TYPE_PASTELS: Record<ElementType, string> = {
@@ -82,7 +85,8 @@ export const TYPE_PASTELS: Record<ElementType, string> = {
     'Psíquico': 'bg-pink-200/40 border-pink-300/50',
     'Hada': 'bg-rose-200/40 border-rose-300/50',
     'Lucha': 'bg-orange-700/40 border-orange-600/50',
-    'Siniestro': 'bg-slate-800/60 border-slate-700/50'
+    'Siniestro': 'bg-slate-800/60 border-slate-700/50',
+    'Veneno': 'bg-fuchsia-800/40 border-fuchsia-700/50'
 };
 
 export const TYPE_VIVID: Record<ElementType, string> = {
@@ -102,7 +106,8 @@ export const TYPE_VIVID: Record<ElementType, string> = {
     'Psíquico': 'bg-pink-500',
     'Hada': 'bg-rose-400',
     'Lucha': 'bg-orange-700',
-    'Siniestro': 'bg-gray-900'
+    'Siniestro': 'bg-gray-900',
+    'Veneno': 'bg-fuchsia-900'
 };
 
 // Interference Mapping
@@ -113,7 +118,8 @@ export const INTERFERENCE_RULES: Record<ElementType, 'rock' | 'steel' | 'ice' | 
     'Planta': 'rock', 'Eléctrico': 'steel', 'Bicho': 'rock',
     'Fantasma': 'ice', 'Volador': 'rock', 'Hada': 'ice',
     'Normal': 'random', 'Dragón': 'random',
-    'Lucha': 'rock', 'Siniestro': 'ice'
+    'Lucha': 'rock', 'Siniestro': 'ice',
+    'Veneno': 'random'
 };
 
 
@@ -133,6 +139,7 @@ const BG_FAIRY = "bg-[radial-gradient(circle_at_top_left,_var(--tw-gradient-stop
 const BG_SKY = "bg-[linear-gradient(to_bottom,_var(--tw-gradient-stops))] from-sky-900 via-blue-950 to-slate-900";
 const BG_FIGHT = "bg-[radial-gradient(circle_at_bottom_right,_var(--tw-gradient-stops))] from-orange-900 via-red-950 to-black";
 const BG_DARK = "bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-900 via-slate-950 to-black";
+const BG_POISON = "bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-fuchsia-900 via-purple-950 to-black";
 
 
 export const MONSTER_DB: Boss[] = [
@@ -203,7 +210,7 @@ export const MONSTER_DB: Boss[] = [
     { id: "m007", name: "Copo", emoji: "❄️", type: "Hielo", maxHp: 1300, currentHp: 1300, description: "Obsesionado con la geometría fractal.", skillType: "clear_rocks", skillName: "Desprendimiento", skillCost: 12, skillDescription: "Rompe 5 Rocas." },
     // Roca -> Rompe Acero
     { id: "m008", name: "Gólem", emoji: "🗿", type: "Roca", maxHp: 2000, currentHp: 2000, description: "Una estatua de la Isla de Pascua que se cansó de mirar al horizonte.", skillType: "clear_steel", skillName: "Cabezazo", skillCost: 15, skillDescription: "Rompe 4 Aceros." },
-    // REPLACED: Electrobird -> Pillo (Volador)
+    // Pillo (Volador)
     { id: "m009", name: "Pillo", emoji: "🐦", type: "Volador", maxHp: 1500, currentHp: 1500, description: "Un pájaro cleptómano que colecciona objetos brillantes.", skillType: "clear_ice", skillName: "Aleteo", skillCost: 12, skillDescription: "Derrite 5 Hielos." },
     // Dragón (Boss) -> Random/Any
     { id: "m010", name: "Draco", emoji: "🐉", type: "Dragón", maxHp: 3000, currentHp: 3000, description: "JEFE: Acumula oro compulsivamente.", skillType: "clear_random", skillName: "Caos Dracónico", skillCost: 15, skillDescription: "Elimina 5 casillas al azar." },
@@ -211,15 +218,15 @@ export const MONSTER_DB: Boss[] = [
     // LEVEL 11-20
     // Acero -> Rompe Acero
     { id: "m011", name: "AceroBot", emoji: "🤖", type: "Acero", maxHp: 3500, currentHp: 3500, description: "Un robot de limpieza que cobró conciencia.", skillType: "clear_steel", skillName: "Taladro", skillCost: 18, skillDescription: "Rompe 5 Aceros." },
-    // REPLACED: Magmablob -> Kankik (Lucha)
+    // Kankik (Lucha)
     { id: "m012", name: "Kankik", emoji: "🦘", type: "Lucha", maxHp: 3800, currentHp: 3800, description: "Un canguro boxeador con un gancho de derecha devastador.", skillType: "clear_rocks", skillName: "Puño Dinámico", skillCost: 15, skillDescription: "Rompe 6 Rocas." },
     // Planta -> Convert
     { id: "m013", name: "Cactus", emoji: "🌵", type: "Planta", maxHp: 3200, currentHp: 3200, description: "Quiere abrazar a todo el mundo para demostrar su afecto.", skillType: "convert_type", skillName: "Espinas Amigas", skillCost: 18, skillDescription: "Convierte 6 fichas en Cactus." },
-    // REPLACED: Tibucyber -> Trizeta (Psíquico)
+    // Trizeta (Psíquico)
     { id: "m014", name: "Trizeta", emoji: "🦥", type: "Psíquico", maxHp: 4000, currentHp: 4000, description: "Se mueve tan lento que ve el futuro.", skillType: "convert_type", skillName: "Premonición", skillCost: 15, skillDescription: "Convierte 5 fichas en Trizeta." },
-    // Fantasma -> Combo/Self Clear
-    { id: "m015", name: "Ojo Sombra", emoji: "👁️", type: "Fantasma", maxHp: 3600, currentHp: 3600, description: "Te está mirando y juzga tus decisiones.", skillType: "clear_self", skillName: "Desvanecerse", skillCost: 14, skillDescription: "Elimina 6 Ojos Sombra." },
-    // REPLACED: Zombi -> Mapatraka (Siniestro)
+    // REPLACED: Ojo Sombra -> Korovi (Volador)
+    { id: "m015", name: "Korovi", emoji: "🐦‍⬛", type: "Volador", maxHp: 3600, currentHp: 3600, description: "Un cuervo que te juzga en silencio y colecciona recuerdos brillantes.", skillType: "clear_random", skillName: "Viento Negro", skillCost: 14, skillDescription: "Elimina 6 casillas al azar." },
+    // Mapatraka (Siniestro)
     { id: "m016", name: "Mapatraka", emoji: "🦝", type: "Siniestro", maxHp: 4200, currentHp: 4200, description: "Un mapache bandido que opera bajo la luz de la luna.", skillType: "clear_random", skillName: "Robo", skillCost: 20, skillDescription: "Elimina 7 casillas al azar." },
     // Acero -> Rompe Acero
     { id: "m017", name: "Alien", emoji: "👽", type: "Acero", maxHp: 4500, currentHp: 4500, description: "Vino a invadir la Tierra pero descubrió TikTok.", skillType: "clear_steel", skillName: "Rayo Tractor", skillCost: 15, skillDescription: "Rompe 4 Aceros." },
@@ -227,7 +234,7 @@ export const MONSTER_DB: Boss[] = [
     { id: "m018", name: "Kraken", emoji: "🐙", type: "Agua", maxHp: 5000, currentHp: 5000, description: "Un cefalópodo incomprendido que solo quiere chocar los cinco.", skillType: "clear_rocks", skillName: "Tentáculos", skillCost: 12, skillDescription: "Rompe 5 Rocas." },
     // Hielo -> Rompe Rocas
     { id: "m019", name: "Yeti", emoji: "🦍", type: "Hielo", maxHp: 5500, currentHp: 5500, description: "El campeón indiscutible de las escondidas.", skillType: "clear_rocks", skillName: "Avalancha", skillCost: 15, skillDescription: "Rompe 6 Rocas." },
-    // REPLACED: Fénix (Boss) -> Gato (Siniestro)
+    // Gato (Siniestro)
     { id: "m020", name: "Gato", emoji: "😺", type: "Siniestro", maxHp: 6000, currentHp: 6000, description: "JEFE: Planea la dominación mundial desde su caja de arena.", skillType: "clear_self", skillName: "7 Vidas", skillCost: 15, skillDescription: "Elimina todos los Gatos." },
 
     // HARD MODE
@@ -235,22 +242,36 @@ export const MONSTER_DB: Boss[] = [
     { id: "m021", name: "Vampiro", emoji: "🧛", type: "Fantasma", maxHp: 7000, currentHp: 7000, description: "Odia trabajar de noche y tiene déficit de vitamina D.", skillType: "convert_type", skillName: "Hipnosis", skillCost: 20, skillDescription: "Convierte 7 fichas en Vampiros." },
     // Eléctrico -> Descongela
     { id: "m022", name: "Genio", emoji: "🧞", type: "Eléctrico", maxHp: 7500, currentHp: 7500, description: "Un bromista cósmico.", skillType: "clear_ice", skillName: "Deseo Ardiente", skillCost: 18, skillDescription: "Derrite 7 Hielos." },
-    // REPLACED: Oni -> Peñasco (Roca)
+    // Peñasco (Roca)
     { id: "m023", name: "Peñasco", emoji: "🐗", type: "Roca", maxHp: 8000, currentHp: 8000, description: "Un jabalí tan duro que rompe diamantes.", skillType: "clear_steel", skillName: "Embestida", skillCost: 18, skillDescription: "Rompe 5 Aceros." },
     // Normal -> Random Clear
     { id: "m024", name: "Payaso", emoji: "🤡", type: "Normal", maxHp: 8500, currentHp: 8500, description: "Se ríe solo en rincones oscuros.", skillType: "clear_random", skillName: "Broma Pesada", skillCost: 16, skillDescription: "Elimina 6 casillas al azar." },
-    // REPLACED: Unicornio -> Cucujaca (Hada)
+    // Cucujaca (Hada)
     { id: "m025", name: "Cucujaca", emoji: "🦄", type: "Hada", maxHp: 9000, currentHp: 9000, description: "Una leyenda que concede deseos a cambio de zanahorias.", skillType: "clear_rocks", skillName: "Polvo de Hada", skillCost: 18, skillDescription: "Elimina 7 Rocas." },
     // Dragón -> Clear Self
     { id: "m026", name: "T-Rex", emoji: "🦖", type: "Dragón", maxHp: 10000, currentHp: 10000, description: "Está muy enfadado porque no puede abrocharse los zapatos.", skillType: "clear_self", skillName: "Rugido", skillCost: 15, skillDescription: "Elimina 7 T-Rex." },
-    // REPLACED: Cthulhu -> Tembleon (Tierra)
+    // Tembleon (Tierra)
     { id: "m027", name: "Tembleon", emoji: "🦁", type: "Tierra", maxHp: 12000, currentHp: 12000, description: "Su rugido puede partir continentes por la mitad.", skillType: "clear_rocks", skillName: "Terremoto", skillCost: 20, skillDescription: "Rompe 8 Rocas." },
-    // REPLACED: Muerte -> Bicheto (Bicho)
+    // Bicheto (Bicho)
     { id: "m028", name: "Bicheto", emoji: "🐛", type: "Bicho", maxHp: 14000, currentHp: 14000, description: "Tiene un apetito insaciable por ciudades enteras.", skillType: "nuke", skillName: "Picadura Letal", skillCost: 25, skillDescription: "Daño fijo de 3500." },
-    // REPLACED: Sol -> Orange (Fuego)
-    { id: "m029", name: "Orange", emoji: "🦧", type: "Fuego", maxHp: 16000, currentHp: 16000, description: "Un orangután con pelaje hecho de plasma solar.", skillType: "clear_ice", skillName: "Llama Solar", skillCost: 25, skillDescription: "Derrite 8 Hielos." },
+    // REPLACED: Orange -> Fénix (Fuego)
+    { id: "m029", name: "Fénix", emoji: "🐦‍🔥", type: "Fuego", maxHp: 16000, currentHp: 16000, description: "Resurge de sus cenizas... para quemar tu tostada.", skillType: "clear_ice", skillName: "Renacer", skillCost: 25, skillDescription: "Derrite 8 Hielos." },
     // Normal (Boss) -> Convert
     { id: "m030", name: "Rey Slime", emoji: "👑", type: "Normal", maxHp: 20000, currentHp: 20000, description: "JEFE: Una masa gelatinosa con corona.", skillType: "convert_type", skillName: "Real Decreto", skillCost: 25, skillDescription: "Convierte 8 fichas en Rey Slime." },
+
+    // NEW MONSTERS
+    // Chupiblad (Bicho)
+    { id: "m031", name: "Chupiblad", emoji: "🦟", type: "Bicho", maxHp: 9500, currentHp: 9500, description: "El terror de los campamentos de verano.", skillType: "clear_self", skillName: "Drenaje", skillCost: 15, skillDescription: "Elimina 7 Chupiblads." },
+    // Zespira (Psíquico)
+    { id: "m032", name: "Zespira", emoji: "🦓", type: "Psíquico", maxHp: 10500, currentHp: 10500, description: "Sus rayas hipnotizan a quien las mira fijamente.", skillType: "convert_type", skillName: "Ilusión Óptica", skillCost: 18, skillDescription: "Convierte 6 fichas en Zespira." },
+    // Piñas (Lucha)
+    { id: "m033", name: "Piñas", emoji: "🪅", type: "Lucha", maxHp: 11500, currentHp: 11500, description: "Está harta de que la golpeen, ahora golpea ella.", skillType: "clear_random", skillName: "Estallido Dulce", skillCost: 20, skillDescription: "Elimina 8 casillas al azar." },
+    // Cukiwaii (Veneno)
+    { id: "m034", name: "Cukiwaii", emoji: "🪳", type: "Veneno", maxHp: 13000, currentHp: 13000, description: "Sobreviviría a un apocalipsis nuclear comiendo sobras.", skillType: "nuke", skillName: "Radiación", skillCost: 22, skillDescription: "Daño fijo de 3000." },
+    // Deletéreo (Veneno)
+    { id: "m035", name: "Deletéreo", emoji: "🫠", type: "Veneno", maxHp: 15000, currentHp: 15000, description: "Tóxico en todos los sentidos, especialmente en redes sociales.", skillType: "clear_steel", skillName: "Corrosión", skillCost: 18, skillDescription: "Rompe 6 Aceros." },
+    // Royally (Hada)
+    { id: "m036", name: "Royally", emoji: "🦚", type: "Hada", maxHp: 12000, currentHp: 12000, description: "Tan presumido que sus plumas distraen al enemigo.", skillType: "convert_type", skillName: "Despliegue", skillCost: 18, skillDescription: "Convierte 6 fichas en Royally." },
 ];
 
 export const SECRET_BOSS: Boss = {
@@ -285,6 +306,7 @@ export const getLevelBackground = (level: number, type: ElementType): string => 
         case 'Volador': return BG_SKY;
         case 'Lucha': return BG_FIGHT;
         case 'Siniestro': return BG_DARK;
+        case 'Veneno': return BG_POISON;
         default: return BG_DEFAULT;
     }
 };

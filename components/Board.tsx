@@ -54,7 +54,8 @@ const CANVAS_THEME: Record<string, { fill: string, border: string }> = {
     'Psíquico': { fill: 'rgba(251, 207, 232, 0.4)', border: '#f9a8d4' }, 
     'Hada': { fill: 'rgba(254, 205, 211, 0.4)', border: '#fda4af' },
     'Lucha': { fill: 'rgba(251, 146, 60, 0.4)', border: '#fb923c' },
-    'Siniestro': { fill: 'rgba(71, 85, 105, 0.5)', border: '#475569' }
+    'Siniestro': { fill: 'rgba(71, 85, 105, 0.5)', border: '#475569' },
+    'Veneno': { fill: 'rgba(162, 28, 175, 0.4)', border: '#a21caf' }
 };
 
 const MOVE_SPEED = 0.15; 
