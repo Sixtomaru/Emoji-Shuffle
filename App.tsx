@@ -8,7 +8,7 @@ import CaptureModal from './components/CaptureModal';
 import SkillBar from './components/SkillBar'; // NEW IMPORT
 import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_WIDTH, GRID_HEIGHT, ProjectileData } from './types';
 import { createBoard, findMatches, applyGravity, applyInterference, MatchGroup, hasPossibleMoves } from './utils/gameLogic';
-import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS, TYPE_PROJECTILE_ICONS } from './constants';
+import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS, TYPE_PROJECTILE_ICONS, TYPE_ICONS } from './constants';
 import { soundManager } from './utils/sound';
 import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2, Save, AlertTriangle, Trash2, Settings, AlertOctagon, Maximize, Download } from 'lucide-react';
 
@@ -146,7 +146,7 @@ const App: React.FC = () => {
           setTimeout(() => {
              setIsTransitioning(false);
           }, 100); // Short delay before revealing new state
-      }, 500); // 500ms fade out
+      }, 800); // 800ms fade out
   };
 
   const enterFullscreen = () => {
@@ -255,12 +255,7 @@ const App: React.FC = () => {
           return;
       }
       
-      // Check Tutorial
-      if (!localStorage.getItem(SAVE_KEY_TUTORIAL)) {
-          setShowMarathonTutorial(true);
-      }
-
-      const fixedBossIds = ["m010", "m020", "m030"];
+      const fixedBossIds = ["m029", "m022", "m030"]; // Fénix (m029), Genio (m022), Digital Pretzel (m030)
       const nonBosses = MONSTER_DB.filter(m => !fixedBossIds.includes(m.id));
       for (let i = nonBosses.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
@@ -269,9 +264,9 @@ const App: React.FC = () => {
       const plan: Boss[] = [];
       let nonBossIdx = 0;
       for (let i = 1; i <= 30; i++) {
-          if (i === 10) plan.push(MONSTER_DB.find(m => m.id === "m010")!);
-          else if (i === 20) plan.push(MONSTER_DB.find(m => m.id === "m020")!);
-          else if (i === 30) plan.push(MONSTER_DB.find(m => m.id === "m030")!);
+          if (i === 10) plan.push(MONSTER_DB.find(m => m.id === "m029")!); // Fénix
+          else if (i === 20) plan.push(MONSTER_DB.find(m => m.id === "m022")!); // Genio
+          else if (i === 30) plan.push(MONSTER_DB.find(m => m.id === "m030")!); // Digital Pretzel
           else {
               if (nonBossIdx < nonBosses.length) {
                   plan.push(nonBosses[nonBossIdx]);
@@ -288,6 +283,13 @@ const App: React.FC = () => {
       setMovesAtStart(INITIAL_MOVES);
       changeState('team_select');
       setSkillCharges({});
+
+      // Check Tutorial - Show AFTER transition
+      if (!localStorage.getItem(SAVE_KEY_TUTORIAL)) {
+          setTimeout(() => {
+              setShowMarathonTutorial(true);
+          }, 800); // Wait for fade out + fade in
+      }
   };
 
   const handleStartFinalBoss = () => {
@@ -913,7 +915,7 @@ const App: React.FC = () => {
       <div className={`absolute inset-0 z-0 transition-all duration-700 ease-in-out ${getLevelBackground(level, enemy.type)}`}></div>
 
       {/* GLOBAL SCREEN TRANSITION OVERLAY */}
-      <div className={`fixed inset-0 z-[200] bg-black pointer-events-none transition-opacity duration-500 ${isTransitioning ? 'opacity-100' : 'opacity-0'}`}></div>
+      <div className={`fixed inset-0 z-[200] bg-black pointer-events-none transition-opacity duration-800 ${isTransitioning ? 'opacity-100' : 'opacity-0'}`}></div>
 
       {appState === 'menu' && (
           <MainMenu 
@@ -1130,7 +1132,7 @@ const App: React.FC = () => {
                   </div>
                   <h2 className="text-5xl font-black text-white mb-2 tracking-wide text-shadow">{enemy.name}</h2>
                   <div className="bg-white/10 px-4 py-1 rounded-full text-sm font-bold uppercase tracking-widest text-indigo-200 mb-6 border border-white/20">
-                      Tipo: {enemy.type}
+                      Tipo: <span className="text-2xl ml-2">{TYPE_ICONS[enemy.type]}</span>
                   </div>
                   
                   <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700 backdrop-blur w-full mb-4">
