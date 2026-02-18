@@ -376,12 +376,16 @@ const App: React.FC = () => {
           soundManager.playWin();
           changeState('victory'); 
       } else {
-          const nextLvl = level + 1;
-          setLevel(nextLvl);
-          const baseEnemy = levelPlan[nextLvl - 1]; 
-          setNextPreviewEnemy(scaleEnemyHp(baseEnemy, nextLvl, false));
-          setMovesLeft(m => m + MOVES_PER_LEVEL);
-          changeState('team_select');
+          changeState('team_select'); // START VISUAL TRANSITION FIRST
+          
+          // UPDATE DATA ONLY AFTER SCREEN IS DARK (800ms)
+          setTimeout(() => {
+              const nextLvl = level + 1;
+              setLevel(nextLvl);
+              const baseEnemy = levelPlan[nextLvl - 1]; 
+              setNextPreviewEnemy(scaleEnemyHp(baseEnemy, nextLvl, false));
+              setMovesLeft(m => m + MOVES_PER_LEVEL);
+          }, 800);
       }
   };
 
